@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // 1. アップデート時は下の番号を変更してください
-    const APP_VERSION = "Beta#0.23";
+    const APP_VERSION = "Beta#0.24";
 
     // 2. ご自身のSupabase接続情報をここに貼り付けてください
     const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co"; 
@@ -188,11 +188,7 @@
     </div>
 </div>
 
-<script>
-    const script = document.createElement('script');
-    script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2?v=" + encodeURIComponent(APP_VERSION);
-    document.head.appendChild(script);
-</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
     let supabase;
@@ -201,11 +197,13 @@
     // 画面に設定エリアのバージョン番号を表示する
     document.getElementById('versionBadge').innerText = APP_VERSION;
 
-    // ライブラリの読み込み完了を待ってから初期化
-    window.addEventListener('load', () => {
+    // アプリ起動時に即座に初期化してデータを読み込む
+    try {
         supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         loadFromServer();
-    });
+    } catch (e) {
+        alert("初期化エラー: " + e.message);
+    }
 
     // サーバー（Supabase）からデータを取得する
     async function loadFromServer() {
@@ -218,13 +216,15 @@
                 .select('*')
                 .order('id', { ascending: false });
 
-            if (error) throw error;
+            if (error) {
+                alert("Supabaseからのデータ取得に失敗しました:\n" + error.message);
+                return;
+            }
 
             records = data;
             updateLayout();
         } catch (error) {
             console.error("データ取得失敗:", error);
-            alert("データ取得失敗エラー: " + JSON.stringify(error));
             listElement.innerHTML = '<li style="text-align:center; color:#ff3b30; padding:20px 0;">データの取得に失敗しました</li>';
         }
     }
@@ -248,7 +248,7 @@
                     <div class="details">距離: ${record.distance}km / 給油: ${record.amount}L</div>
                 </div>
                 <div class="record-efficiency">
-                    <span class="efficiency-val">${record.efficiency.toFixed(2)} km/L</span>
+                    <span class="efficiency-val">${Number(record.efficiency).toFixed(2)} km/L</span>
                     <button class="delete-btn" onclick="deleteRecord(${record.id})">削除</button>
                 </div>
             `;
@@ -258,6 +258,11 @@
 
     // データを計算してサーバーへ保存
     async function saveRecord() {
+        if (!supabase) {
+            alert("データベースの準備がまだ完了していません。数秒待ってから再度お試しください。");
+            return;
+        }
+
         const distanceInput = document.getElementById('distance');
         const amountInput = document.getElementById('amount');
         
@@ -274,17 +279,15 @@
         const efficiency = distance / amount;
 
         try {
-            // Supabaseへデータを挿入
             const { data, error } = await supabase
                 .from('fuel_records')
                 .insert([
                     { date: dateString, distance: distance, amount: amount, efficiency: efficiency }
                 ])
-                .select(); // ←ここを追加（エラーを詳細に取るため）
+                .select();
 
             if (error) {
-                // Supabase側が返してきたエラーを詳細に表示
-                alert("Supabaseエラーが発生しました：\n" + error.message + "\n詳細: " + error.details + "\nヒント: " + error.hint);
+                alert("Supabaseエラーが発生しました：\n" + error.message + "\n詳細: " + error.details);
                 return;
             }
 
@@ -293,9 +296,8 @@
             loadFromServer();
             
         } catch (error) {
-            // 通信エラーの原因を突き止めるための表示
-                alert("通信エラー詳細：\n" + error.message + "\n\n現在の設定URL:\n" + SUPABASE_URL);
-                console.error(error);
+            alert("通信エラーが発生しました：\n" + error.message);
+            console.error(error);
         }
     }
 
@@ -308,11 +310,14 @@
                     .delete()
                     .eq('id', id);
 
-                if (error) throw error;
+                if (error) {
+                    alert("削除エラー: " + error.message);
+                    return;
+                }
 
                 loadFromServer();
             } catch (error) {
-                alert("データの削除に失敗しました。エラー詳細: " + JSON.stringify(error));
+                alert("通信エラーが発生しました: " + error.message);
                 console.error(error);
             }
         }
