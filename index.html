@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // 1. アップデート時は下の番号を変更してください
-    const APP_VERSION = "Beta#0.21";
+    const APP_VERSION = "Beta#0.22";
 
     // 2. ご自身のSupabase接続情報をここに貼り付けてください
     const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co"; 
@@ -285,6 +285,9 @@
             if (error) {
                 // Supabase側が返してきたエラーを詳細に表示
                 alert("Supabaseエラーが発生しました：\n" + error.message + "\n詳細: " + error.details + "\nヒント: " + error.hint);
+                // 通信エラーの原因を突き止めるための表示
+                alert("通信エラー詳細：\n" + error.message + "\n\n現在の設定URL:\n" + SUPABASE_URL);
+                console.error(error);
                 return;
             }
 
