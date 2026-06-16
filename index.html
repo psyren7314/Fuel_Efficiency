@@ -267,7 +267,8 @@
             loadFromServer();
             
         } catch (error) {
-            alert("サーバーへの保存に失敗しました。");
+            // エラー内容をポップアップで強制的に表示させる
+            alert("エラーが発生しました: " + JSON.stringify(error));
             console.error(error);
         }
     }
