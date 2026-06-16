@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>燃費計算</title>
+    <title>燃費計算 - Supabase版</title>
     <style>
         :root {
             --primary-color: #007aff;
@@ -92,11 +92,6 @@
             opacity: 0.8;
         }
 
-        .btn-secondary {
-            background-color: #8e8e93;
-            margin-top: 10px;
-        }
-
         .record-list {
             list-style: none;
             padding: 0;
@@ -165,34 +160,61 @@
             <input type="number" id="amount" step="0.1" placeholder="例: 35.0">
             <span class="unit">L</span>
         </div>
-        <button onclick="saveRecord()">データを計算・保存</button>
+        <button onclick="saveRecord()">データを計算・サーバーへ保存</button>
     </div>
 
     <div class="card">
-        <div class="card-title">燃費記録履歴</div>
+        <div class="card-title">燃費記録履歴 (サーバー同期)</div>
         <ul id="recordList" class="record-list">
             </ul>
-        <button onclick="downloadCSV()" class="btn-secondary" style="margin-top: 20px;">CSVとしてダウンロード</button>
     </div>
 </div>
 
-<script>
-    // アプリ起動時にデータを読み込む
-    let records = JSON.parse(localStorage.getItem('fuelRecords')) || [];
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    // 画面表示の更新
+<script>
+    // 1. 各自のSupabase接続情報をここに貼り付けます
+    const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co/rest/v1/"; 
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwZHBveHJ3dWdxZW9ia2J5aHp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MTQyNTUsImV4cCI6MjA5NzE5MDI1NX0.6bmXeAWZ5bZVa7oPT6upM3_CpXoHIeU8fIYwGiT9scw";
+
+    // Supabaseクライアントの初期化
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let records = [];
+
+    // サーバー（Supabase）からデータを取得する
+    async function loadFromServer() {
+        const listElement = document.getElementById('recordList');
+        listElement.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:20px 0;">読み込み中...</li>';
+
+        try {
+            // fuel_recordsテーブルから、idを基準に降順（最新順）で取得
+            const { data, error } = await supabase
+                .from('fuel_records')
+                .select('*')
+                .order('id', { ascending: false });
+
+            if (error) throw error;
+
+            records = data;
+            updateLayout();
+        } catch (error) {
+            console.error("データ取得失敗:", error);
+            listElement.innerHTML = '<li style="text-align:center; color:#ff3b30; padding:20px 0;">データの取得に失敗しました</li>';
+        }
+    }
+
+    // 画面の表示更新
     function updateLayout() {
         const listElement = document.getElementById('recordList');
         listElement.innerHTML = '';
 
-        if (records.length === 0) {
+        if (!records || records.length === 0) {
             listElement.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:20px 0;">記録がありません</li>';
             return;
         }
 
-        // 最新のものが上に来るようにループ
-        records.forEach((record, index) => {
-            const efficiency = (record.distance / record.amount).toFixed(2);
+        records.forEach((record) => {
             const li = document.createElement('li');
             li.className = 'record-item';
             li.innerHTML = `
@@ -201,16 +223,16 @@
                     <div class="details">距離: ${record.distance}km / 給油: ${record.amount}L</div>
                 </div>
                 <div class="record-efficiency">
-                    <span class="efficiency-val">${efficiency} km/L</span>
-                    <button class="delete-btn" onclick="deleteRecord(${index})">削除</button>
+                    <span class="efficiency-val">${record.efficiency.toFixed(2)} km/L</span>
+                    <button class="delete-btn" onclick="deleteRecord(${record.id})">削除</button>
                 </div>
             `;
             listElement.appendChild(li);
         });
     }
 
-    // データの保存
-    function saveRecord() {
+    // データを計算してサーバーへ保存
+    async function saveRecord() {
         const distanceInput = document.getElementById('distance');
         const amountInput = document.getElementById('amount');
         
@@ -222,67 +244,55 @@
             return;
         }
 
-        // 現在の日時を取得
+        // 日時フォーマットの作成
         const now = new Date();
         const dateString = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        
+        // 燃費の計算
+        const efficiency = distance / amount;
 
-        // データを配列の先頭に追加
-        records.unshift({
-            date: dateString,
-            distance: distance,
-            amount: amount
-        });
+        try {
+            // Supabaseへデータを挿入(Insert)
+            const { error } = await supabase
+                .from('fuel_records')
+                .insert([
+                    { date: dateString, distance: distance, amount: amount, efficiency: efficiency }
+                ]);
 
-        // ローカルストレージに保存
-        localStorage.setItem('fuelRecords', JSON.stringify(records));
+            if (error) throw error;
 
-        // 入力欄をリセット
-        distanceInput.value = '';
-        amountInput.value = '';
-
-        // 表示を更新
-        updateLayout();
+            // 入力欄をクリアして再読み込み
+            distanceInput.value = '';
+            amountInput.value = '';
+            loadFromServer();
+            
+        } catch (error) {
+            alert("サーバーへの保存に失敗しました。");
+            console.error(error);
+        }
     }
 
     // データの削除
-    function deleteRecord(index) {
-        if(confirm('この記録を削除しますか？')) {
-            records.splice(index, 1);
-            localStorage.setItem('fuelRecords', JSON.stringify(records));
-            updateLayout();
+    async function deleteRecord(id) {
+        if (confirm('この記録をサーバーから削除しますか？')) {
+            try {
+                const { error } = await supabase
+                    .from('fuel_records')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                loadFromServer();
+            } catch (error) {
+                alert("データの削除に失敗しました。");
+                console.error(error);
+            }
         }
     }
 
-    // CSVダウンロード機能
-    function downloadCSV() {
-        if (records.length === 0) {
-            alert('ダウンロードするデータがありません。');
-            return;
-        }
-
-        // CSVのヘッダー
-        let csvContent = "\uFEFFDate,Distance(km),Amount(L),Efficiency(km/L)\n";
-
-        // データをCSV形式に変換
-        records.forEach(record => {
-            const efficiency = (record.distance / record.amount).toFixed(2);
-            csvContent += `${record.date},${record.distance},${record.amount},${efficiency}\n`;
-        });
-
-        // ダウンロード処理
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", "fuel_records.csv");
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-
-    // 初回読み込みを実行
-    updateLayout();
+    // アプリ起動時にデータを読み込む
+    loadFromServer();
 </script>
 
 </body>
