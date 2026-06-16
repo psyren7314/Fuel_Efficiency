@@ -177,4 +177,131 @@
     </div>
 </div>
 
-<script src="https
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+    // ⚠️ ご自身のSupabase接続情報をここに貼り付けてください
+    const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co/rest/v1/"; 
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwZHBveHJ3dWdxZW9ia2J5aHp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MTQyNTUsImV4cCI6MjA5NzE5MDI1NX0.6bmXeAWZ5bZVa7oPT6upM3_CpXoHIeU8fIYwGiT9scw";
+
+    // Supabaseクライアントの初期化
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let records = [];
+
+    // サーバー（Supabase）からデータを取得する
+    async function loadFromServer() {
+        const listElement = document.getElementById('recordList');
+        listElement.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:20px 0;">読み込み中...</li>';
+
+        try {
+            const { data, error } = await supabase
+                .from('fuel_records')
+                .select('*')
+                .order('id', { ascending: false });
+
+            if (error) throw error;
+
+            records = data;
+            updateLayout();
+        } catch (error) {
+            console.error("データ取得失敗:", error);
+            alert("データ取得失敗エラー: " + JSON.stringify(error));
+            listElement.innerHTML = '<li style="text-align:center; color:#ff3b30; padding:20px 0;">データの取得に失敗しました</li>';
+        }
+    }
+
+    // 画面の表示更新
+    function updateLayout() {
+        const listElement = document.getElementById('recordList');
+        listElement.innerHTML = '';
+
+        if (!records || records.length === 0) {
+            listElement.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:20px 0;">記録がありません</li>';
+            return;
+        }
+
+        records.forEach((record) => {
+            const li = document.createElement('li');
+            li.className = 'record-item';
+            li.innerHTML = `
+                <div class="record-info">
+                    <div class="date">${record.date}</div>
+                    <div class="details">距離: ${record.distance}km / 給油: ${record.amount}L</div>
+                </div>
+                <div class="record-efficiency">
+                    <span class="efficiency-val">${record.efficiency.toFixed(2)} km/L</span>
+                    <button class="delete-btn" onclick="deleteRecord(${record.id})">削除</button>
+                </div>
+            `;
+            listElement.appendChild(li);
+        });
+    }
+
+    // データを計算してサーバーへ保存
+    async function saveRecord() {
+        const distanceInput = document.getElementById('distance');
+        const amountInput = document.getElementById('amount');
+        
+        const distance = parseFloat(distanceInput.value);
+        const amount = parseFloat(amountInput.value);
+
+        if (isNaN(distance) || distance <= 0 || isNaN(amount) || amount <= 0) {
+            alert('距離と給油量には、0より大きい正しい数値を入力してください。');
+            return;
+        }
+
+        // 日時フォーマットの作成
+        const now = new Date();
+        const dateString = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        
+        // 燃費の計算
+        const efficiency = distance / amount;
+
+        try {
+            // Supabaseへデータを挿入
+            const { error } = await supabase
+                .from('fuel_records')
+                .insert([
+                    { date: dateString, distance: distance, amount: amount, efficiency: efficiency }
+                ]);
+
+            if (error) throw error;
+
+            // 入力欄をクリアして再読み込み
+            distanceInput.value = '';
+            amountInput.value = '';
+            loadFromServer();
+            
+        } catch (error) {
+            // エラーが発生した場合、iPhoneの画面にポップアップでエラー内容を表示
+            alert("サーバーへの保存に失敗しました。エラー詳細: " + JSON.stringify(error));
+            console.error(error);
+        }
+    }
+
+    // データの削除
+    async function deleteRecord(id) {
+        if (confirm('この記録をサーバーから削除しますか？')) {
+            try {
+                const { error } = await supabase
+                    .from('fuel_records')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                loadFromServer();
+            } catch (error) {
+                alert("データの削除に失敗しました。エラー詳細: " + JSON.stringify(error));
+                console.error(error);
+            }
+        }
+    }
+
+    // アプリ起動時にデータを読み込む
+    loadFromServer();
+</script>
+
+</body>
+</html>
