@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // 1. アップデート時は下の番号を変更してください
-    const APP_VERSION = "Beta#0.2";
+    const APP_VERSION = "Beta#0.21";
 
     // 2. ご自身のSupabase接続情報をここに貼り付けてください
     const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co"; 
@@ -274,20 +274,27 @@
         const efficiency = distance / amount;
 
         try {
-            const { error } = await supabase
+            // Supabaseへデータを挿入
+            const { data, error } = await supabase
                 .from('fuel_records')
                 .insert([
                     { date: dateString, distance: distance, amount: amount, efficiency: efficiency }
-                ]);
+                ])
+                .select(); // ←ここを追加（エラーを詳細に取るため）
 
-            if (error) throw error;
+            if (error) {
+                // Supabase側が返してきたエラーを詳細に表示
+                alert("Supabaseエラーが発生しました：\n" + error.message + "\n詳細: " + error.details + "\nヒント: " + error.hint);
+                return;
+            }
 
             distanceInput.value = '';
             amountInput.value = '';
             loadFromServer();
             
         } catch (error) {
-            alert("サーバーへの保存に失敗しました。エラー詳細: " + JSON.stringify(error));
+            // 通信自体が失敗した場合のエラーを表示
+            alert("通信エラーが発生しました：\n" + error.message);
             console.error(error);
         }
     }
