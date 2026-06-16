@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // 1. アップデート時は下の番号を変更してください
-    const APP_VERSION = "Beta#0.24";
+    const APP_VERSION = "Beta#0.25";
 
     // 2. ご自身のSupabase接続情報をここに貼り付けてください
     const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co"; 
@@ -159,12 +159,36 @@
             cursor: pointer;
             width: auto;
         }
+
+        /* 最終デバッグログ用のデザイン設定 */
+        .debug-box {
+            background-color: #fff2f2;
+            border: 2px dashed #ff3b30;
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 30px;
+            display: none; /* エラー時のみJavaScriptで表示 */
+        }
+        .debug-title {
+            color: #ff3b30;
+            font-weight: bold;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .debug-content {
+            font-family: monospace;
+            font-size: 13px;
+            color: #333;
+            white-space: pre-wrap;
+            margin: 0;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>燃費計算<span id="versionBadge" class="commit-badge"></span></h1>
+    <h1>燃費計算<span class="commit-badge"><script>document.write(APP_VERSION);</script></span></h1>
 
     <div class="card">
         <div class="card-title">新規記録</div>
@@ -186,27 +210,43 @@
         <ul id="recordList" class="record-list">
             </ul>
     </div>
+
+    <div id="debugBox" class="debug-box">
+        <div class="debug-title">⚠️ システムデバッグログ（エラー検知）</div>
+        <pre id="debugContent" class="debug-content"></pre>
+    </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+    const script = document.createElement('script');
+    script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2?v=" + encodeURIComponent(APP_VERSION);
+    script.onload = () => {
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            loadFromServer();
+        } catch (e) {
+            showDebugLog("初期化エラー:\n" + e.message + "\n" + e.stack);
+        }
+    };
+    script.onerror = () => {
+        showDebugLog("Supabaseライブラリの読み込み自体に失敗しました。インターネット接続やURLを確認してください。");
+    };
+    document.head.appendChild(script);
+</script>
 
 <script>
     let supabase;
     let records = [];
 
-    // 画面（DOM）が完全に読み込まれてから初期化とバージョン表示を実行
-    window.addEventListener('DOMContentLoaded', () => {
-        // バージョン番号を表示
-        document.getElementById('versionBadge').innerText = APP_VERSION;
-        
-        // Supabaseの初期化
-        try {
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            loadFromServer();
-        } catch (e) {
-            alert("初期化エラー: " + e.message);
+    // 画面にエラー内容を出力するデバッグ関数
+    function showDebugLog(text) {
+        const box = document.getElementById('debugBox');
+        const content = document.getElementById('debugContent');
+        if (box && content) {
+            box.style.display = 'block'; // ログエリアを表示
+            content.innerText = text;
         }
-    });
+    }
 
     // サーバー（Supabase）からデータを取得する
     async function loadFromServer() {
@@ -220,7 +260,11 @@
                 .order('id', { ascending: false });
 
             if (error) {
-                alert("Supabaseからのデータ取得に失敗しました:\n" + error.message);
+                showDebugLog("【データ読み込み失敗】\n" + 
+                             "メッセージ: " + error.message + "\n" + 
+                             "詳細: " + error.details + "\n" + 
+                             "ヒント: " + error.hint + "\n" +
+                             "コード: " + error.code);
                 return;
             }
 
@@ -228,6 +272,7 @@
             updateLayout();
         } catch (error) {
             console.error("データ取得失敗:", error);
+            showDebugLog("【読み込み時の通信例外】\n" + error.message + "\n" + error.stack);
             listElement.innerHTML = '<li style="text-align:center; color:#ff3b30; padding:20px 0;">データの取得に失敗しました</li>';
         }
     }
@@ -262,7 +307,7 @@
     // データを計算してサーバーへ保存
     async function saveRecord() {
         if (!supabase) {
-            alert("データベースの準備がまだ完了していません。数秒待ってから再度お試しください。");
+            showDebugLog("データベース(supabase)のオブジェクトが生成されていません。URLやキーの記述、読み込み順序に問題があります。");
             return;
         }
 
@@ -290,7 +335,11 @@
                 .select();
 
             if (error) {
-                alert("Supabaseエラーが発生しました：\n" + error.message + "\n詳細: " + error.details);
+                showDebugLog("【Supabase保存拒否エラー】\n" + 
+                             "・原因(Message): " + error.message + "\n" + 
+                             "・詳細(Details): " + error.details + "\n" + 
+                             "・ヒント(Hint): " + error.hint + "\n" +
+                             "・エラーコード: " + error.code);
                 return;
             }
 
@@ -299,7 +348,12 @@
             loadFromServer();
             
         } catch (error) {
-            alert("通信エラーが発生しました：\n" + error.message);
+            showDebugLog("【保存時のブラウザ通信ブロック】\n" + 
+                         "・メッセージ: " + error.message + "\n" +
+                         "・エラー名: " + error.name + "\n" +
+                         "・スタックトレース:\n" + error.stack + "\n\n" +
+                         "【現在の通信設定確認】\n" +
+                         "設定されているURL: " + SUPABASE_URL);
             console.error(error);
         }
     }
@@ -314,13 +368,13 @@
                     .eq('id', id);
 
                 if (error) {
-                    alert("削除エラー: " + error.message);
+                    showDebugLog("【削除エラー】\n" + error.message);
                     return;
                 }
 
                 loadFromServer();
             } catch (error) {
-                alert("通信エラーが発生しました: " + error.message);
+                showDebugLog("【削除時の通信例外】\n" + error.message);
                 console.error(error);
             }
         }
