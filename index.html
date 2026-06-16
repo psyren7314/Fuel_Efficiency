@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // 1. アップデート時は下の番号を変更してください
-    const APP_VERSION = "Beta#0.26";
+    const APP_VERSION = "Beta#0.27";
 
     // 2. ご自身のSupabase接続情報をここに貼り付けてください
     const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co"; 
@@ -184,10 +184,7 @@
         }
     </style>
 
-    <script>
-        const cdnUrl = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2?v=" + encodeURIComponent(APP_VERSION);
-        document.write('<script src="' + cdnUrl + '"><\/script>');
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -225,7 +222,6 @@
     let supabase;
     let records = [];
 
-    // エラー表示関数
     function showDebugLog(text) {
         const box = document.getElementById('debugBox');
         const content = document.getElementById('debugContent');
@@ -235,23 +231,22 @@
         }
     }
 
-    // HTMLの解析終了後に即時Supabaseを起動
-    try {
-        if (window.supabase) {
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            loadFromServer();
-        } else {
-            showDebugLog("Supabaseライブラリ(window.supabase)がブラウザに読み込まれていません。");
+    // 画面起動時にSupabaseを初期化
+    window.addEventListener('DOMContentLoaded', () => {
+        try {
+            if (window.supabase) {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                loadFromServer();
+            } else {
+                showDebugLog("Supabaseライブラリが読み込まれていません。");
+            }
+        } catch (e) {
+            showDebugLog("初期化エラー:\n" + e.message);
         }
-    } catch (e) {
-        showDebugLog("初期化エラー:\n" + e.message + "\n" + e.stack);
-    }
+    });
 
     // サーバーからデータを取得
     async function loadFromServer() {
-        const listElement = document.getElementById('recordList');
-        listElement.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:20px 0;">読み込み中...</li>';
-
         try {
             const { data, error } = await supabase
                 .from('fuel_records')
@@ -263,11 +258,10 @@
                 return;
             }
 
-            records = data;
+            records = data || [];
             updateLayout();
         } catch (error) {
             showDebugLog("【読み込み通信例外】\n" + error.message);
-            listElement.innerHTML = '<li style="text-align:center; color:#ff3b30; padding:20px 0;">データの取得に失敗しました</li>';
         }
     }
 
@@ -281,9 +275,11 @@
             return;
         }
 
-        records.forEach((record) => {
+        records.forEach((record, index) => {
             const li = document.createElement('li');
             li.className = 'record-item';
+            const deleteAction = record.id ? `deleteRecord(${record.id})` : `removeLocalRecord(${index})`;
+            
             li.innerHTML = `
                 <div class="record-info">
                     <div class="date">${record.date}</div>
@@ -291,7 +287,7 @@
                 </div>
                 <div class="record-efficiency">
                     <span class="efficiency-val">${Number(record.efficiency).toFixed(2)} km/L</span>
-                    <button class="delete-btn" onclick="deleteRecord(${record.id})">削除</button>
+                    <button class="delete-btn" onclick="${deleteAction}">削除</button>
                 </div>
             `;
             listElement.appendChild(li);
@@ -301,7 +297,7 @@
     // データ保存
     async function saveRecord() {
         if (!supabase) {
-            showDebugLog("データベースオブジェクトが生成されていません。再度ページを読み込んでください。");
+            showDebugLog("データベースオブジェクトが生成されていません。");
             return;
         }
 
@@ -320,29 +316,32 @@
         const dateString = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         const efficiency = distance / amount;
 
-        try {
-            const { data, error } = await supabase
-                .from('fuel_records')
-                .insert([
-                    { date: dateString, distance: distance, amount: amount, efficiency: efficiency }
-                ])
-                .select();
+        // 画面に先行して追加
+        const newRecord = { date: dateString, distance: distance, amount: amount, efficiency: efficiency };
+        records.unshift(newRecord);
+        updateLayout();
 
-            if (error) {
-                showDebugLog("【Supabase保存拒否】\n" + error.message + "\n詳細: " + error.details);
-                return;
-            }
+        distanceInput.value = '';
+        amountInput.value = '';
 
-            distanceInput.value = '';
-            amountInput.value = '';
-            loadFromServer();
-            
-        } catch (error) {
-            showDebugLog("【保存通信例外】\n" + error.message + "\nURL: " + SUPABASE_URL);
-        }
+        // サーバーに送信
+        supabase
+            .from('fuel_records')
+            .insert([newRecord])
+            .select()
+            .then(({ data, error }) => {
+                if (error) {
+                    showDebugLog("【裏でのサーバー保存に失敗】\n" + error.message + "\n詳細: " + error.details);
+                } else {
+                    loadFromServer();
+                }
+            })
+            .catch((err) => {
+                showDebugLog("【保存通信例外】\n" + err.message);
+            });
     }
 
-    // データ削除
+    // 削除処理
     async function deleteRecord(id) {
         if (confirm('この記録をサーバーから削除しますか？')) {
             try {
@@ -361,6 +360,11 @@
                 showDebugLog("【削除通信例外】\n" + error.message);
             }
         }
+    }
+
+    function removeLocalRecord(index) {
+        records.splice(index, 1);
+        updateLayout();
     }
 </script>
 
