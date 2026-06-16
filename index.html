@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>燃費計算</title>
+    <style>
+        :root {
+            --primary-color: #007aff;
+            --bg-color: #f2f2f7;
+            --card-bg: #ffffff;
+            --text-color: #1c1c1e;
+            --accent-color: #34c759;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            width: 90px;
+            font-weight: 500;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #d1d1d6;
+            border-radius: 8px;
+            font-size: 16px;
+            background-color: #fafafc;
+        }
+
+        .input-group .unit {
+            width: 40px;
+            text-align: right;
+            color: #8e8e93;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:active {
+            opacity: 0.8;
+        }
+
+        .btn-secondary {
+            background-color: #8e8e93;
+            margin-top: 10px;
+        }
+
+        .record-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .record-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #e5e5ea;
+        }
+
+        .record-item:last-child {
+            border-bottom: none;
+        }
+
+        .record-info .date {
+            font-size: 12px;
+            color: #8e8e93;
+            margin-bottom: 4px;
+        }
+
+        .record-info .details {
+            font-size: 14px;
+        }
+
+        .record-efficiency {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .efficiency-val {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-color);
+        }
+
+        .delete-btn {
+            background: none;
+            color: #ff3b30;
+            border: none;
+            padding: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            width: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>燃費計算</h1>
+
+    <div class="card">
+        <div class="card-title">新規記録</div>
+        <div class="input-group">
+            <label for="distance">走行距離</label>
+            <input type="number" id="distance" step="0.1" placeholder="例: 450.5">
+            <span class="unit">km</span>
+        </div>
+        <div class="input-group">
+            <label for="amount">給油量</label>
+            <input type="number" id="amount" step="0.1" placeholder="例: 35.0">
+            <span class="unit">L</span>
+        </div>
+        <button onclick="saveRecord()">データを計算・保存</button>
+    </div>
+
+    <div class="card">
+        <div class="card-title">燃費記録履歴</div>
+        <ul id="recordList" class="record-list">
+            </ul>
+        <button onclick="downloadCSV()" class="btn-secondary" style="margin-top: 20px;">CSVとしてダウンロード</button>
+    </div>
+</div>
+
+<script>
+    // アプリ起動時にデータを読み込む
+    let records = JSON.parse(localStorage.getItem('fuelRecords')) || [];
+
+    // 画面表示の更新
+    function updateLayout() {
+        const listElement = document.getElementById('recordList');
+        listElement.innerHTML = '';
+
+        if (records.length === 0) {
+            listElement.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:20px 0;">記録がありません</li>';
+            return;
+        }
+
+        // 最新のものが上に来るようにループ
+        records.forEach((record, index) => {
+            const efficiency = (record.distance / record.amount).toFixed(2);
+            const li = document.createElement('li');
+            li.className = 'record-item';
+            li.innerHTML = `
+                <div class="record-info">
+                    <div class="date">${record.date}</div>
+                    <div class="details">距離: ${record.distance}km / 給油: ${record.amount}L</div>
+                </div>
+                <div class="record-efficiency">
+                    <span class="efficiency-val">${efficiency} km/L</span>
+                    <button class="delete-btn" onclick="deleteRecord(${index})">削除</button>
+                </div>
+            `;
+            listElement.appendChild(li);
+        });
+    }
+
+    // データの保存
+    function saveRecord() {
+        const distanceInput = document.getElementById('distance');
+        const amountInput = document.getElementById('amount');
+        
+        const distance = parseFloat(distanceInput.value);
+        const amount = parseFloat(amountInput.value);
+
+        if (isNaN(distance) || distance <= 0 || isNaN(amount) || amount <= 0) {
+            alert('距離と給油量には、0より大きい正しい数値を入力してください。');
+            return;
+        }
+
+        // 現在の日時を取得
+        const now = new Date();
+        const dateString = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+        // データを配列の先頭に追加
+        records.unshift({
+            date: dateString,
+            distance: distance,
+            amount: amount
+        });
+
+        // ローカルストレージに保存
+        localStorage.setItem('fuelRecords', JSON.stringify(records));
+
+        // 入力欄をリセット
+        distanceInput.value = '';
+        amountInput.value = '';
+
+        // 表示を更新
+        updateLayout();
+    }
+
+    // データの削除
+    function deleteRecord(index) {
+        if(confirm('この記録を削除しますか？')) {
+            records.splice(index, 1);
+            localStorage.setItem('fuelRecords', JSON.stringify(records));
+            updateLayout();
+        }
+    }
+
+    // CSVダウンロード機能
+    function downloadCSV() {
+        if (records.length === 0) {
+            alert('ダウンロードするデータがありません。');
+            return;
+        }
+
+        // CSVのヘッダー
+        let csvContent = "\uFEFFDate,Distance(km),Amount(L),Efficiency(km/L)\n";
+
+        // データをCSV形式に変換
+        records.forEach(record => {
+            const efficiency = (record.distance / record.amount).toFixed(2);
+            csvContent += `${record.date},${record.distance},${record.amount},${efficiency}\n`;
+        });
+
+        // ダウンロード処理
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "fuel_records.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // 初回読み込みを実行
+    updateLayout();
+</script>
+
+</body>
+</html>
