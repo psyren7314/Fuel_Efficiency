@@ -1,9 +1,20 @@
 <!DOCTYPE html>
+<script>
+    // 1. アップデート時は下の番号を変更してください
+    const APP_VERSION = "#0.1";
+
+    // 2. ご自身のSupabase接続情報をここに貼り付けてください
+    const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co/rest/v1/"; 
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwZHBveHJ3dWdxZW9ia2J5aHp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MTQyNTUsImV4cCI6MjA5NzE5MDI1NX0.6bmXeAWZ5bZVa7oPT6upM3_CpXoHIeU8fIYwGiT9scw";
+</script>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>燃費計算 (#3)</title>
+    <title>燃費計算</title>
+    
+    <script> document.title = "燃費計算 (" + APP_VERSION + ")"; </script>
+
     <style>
         :root {
             --primary-color: #007aff;
@@ -153,7 +164,7 @@
 <body>
 
 <div class="container">
-    <h1>燃費計算<span class="commit-badge">#3</span></h1>
+    <h1>燃費計算<span id="versionBadge" class="commit-badge"></span></h1>
 
     <div class="card">
         <div class="card-title">新規記録</div>
@@ -177,17 +188,24 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2?v=3"></script>
+<script>
+    const script = document.createElement('script');
+    script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2?v=" + encodeURIComponent(APP_VERSION);
+    document.head.appendChild(script);
+</script>
 
 <script>
-    // ⚠️ ご自身のSupabase接続情報をここに貼り付けてください
-    const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co/rest/v1/"; 
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwZHBveHJ3dWdxZW9ia2J5aHp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MTQyNTUsImV4cCI6MjA5NzE5MDI1NX0.6bmXeAWZ5bZVa7oPT6upM3_CpXoHIeU8fIYwGiT9scw";
-
-    // Supabaseクライアントの初期化
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+    let supabase;
     let records = [];
+
+    // 画面に設定エリアのバージョン番号を表示する
+    document.getElementById('versionBadge').innerText = APP_VERSION;
+
+    // ライブラリの読み込み完了を待ってから初期化
+    window.addEventListener('load', () => {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        loadFromServer();
+    });
 
     // サーバー（Supabase）からデータを取得する
     async function loadFromServer() {
@@ -251,15 +269,11 @@
             return;
         }
 
-        // 日時フォーマットの作成
         const now = new Date();
         const dateString = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        
-        // 燃費の計算
         const efficiency = distance / amount;
 
         try {
-            // Supabaseへデータを挿入
             const { error } = await supabase
                 .from('fuel_records')
                 .insert([
@@ -268,13 +282,11 @@
 
             if (error) throw error;
 
-            // 入力欄をクリアして再読み込み
             distanceInput.value = '';
             amountInput.value = '';
             loadFromServer();
             
         } catch (error) {
-            // エラーが発生した場合、iPhoneの画面にポップアップでエラー内容を表示
             alert("サーバーへの保存に失敗しました。エラー詳細: " + JSON.stringify(error));
             console.error(error);
         }
@@ -298,9 +310,6 @@
             }
         }
     }
-
-    // アプリ起動時にデータを読み込む
-    loadFromServer();
 </script>
 
 </body>
