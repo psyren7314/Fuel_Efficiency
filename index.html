@@ -194,16 +194,19 @@
     let supabase;
     let records = [];
 
-    // 画面に設定エリアのバージョン番号を表示する
-    document.getElementById('versionBadge').innerText = APP_VERSION;
-
-    // アプリ起動時に即座に初期化してデータを読み込む
-    try {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        loadFromServer();
-    } catch (e) {
-        alert("初期化エラー: " + e.message);
-    }
+    // 画面（DOM）が完全に読み込まれてから初期化とバージョン表示を実行
+    window.addEventListener('DOMContentLoaded', () => {
+        // バージョン番号を表示
+        document.getElementById('versionBadge').innerText = APP_VERSION;
+        
+        // Supabaseの初期化
+        try {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            loadFromServer();
+        } catch (e) {
+            alert("初期化エラー: " + e.message);
+        }
+    });
 
     // サーバー（Supabase）からデータを取得する
     async function loadFromServer() {
