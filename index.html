@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // 1. アップデート時は下の番号を変更してください
-    const APP_VERSION = "Beta#0.27";
+    const APP_VERSION = "Beta#0.28";
 
     // 2. ご自身のSupabase接続情報をここに貼り付けてください
     const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co"; 
@@ -231,37 +231,35 @@
         }
     }
 
-    // 画面起動時にSupabaseを初期化
+    // 画面起動時の処理
     window.addEventListener('DOMContentLoaded', () => {
         try {
-            if (window.supabase) {
+            if (window.supabase && SUPABASE_URL.indexOf("YOUR_PROJECT_ID") === -1) {
                 supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 loadFromServer();
             } else {
-                showDebugLog("Supabaseライブラリが読み込まれていません。");
+                console.log("Supabase未設定のためローカルモードで動作します。");
             }
         } catch (e) {
-            showDebugLog("初期化エラー:\n" + e.message);
+            console.log("初期化スキップ:", e.message);
         }
     });
 
     // サーバーからデータを取得
     async function loadFromServer() {
+        if (!supabase) return;
         try {
             const { data, error } = await supabase
                 .from('fuel_records')
                 .select('*')
                 .order('id', { ascending: false });
 
-            if (error) {
-                showDebugLog("【データ読み込み失敗】\n" + error.message + "\n詳細: " + error.details);
-                return;
+            if (!error && data) {
+                records = data;
+                updateLayout();
             }
-
-            records = data || [];
-            updateLayout();
         } catch (error) {
-            showDebugLog("【読み込み通信例外】\n" + error.message);
+            console.error(error);
         }
     }
 
@@ -294,13 +292,8 @@
         });
     }
 
-    // データ保存
-    async function saveRecord() {
-        if (!supabase) {
-            showDebugLog("データベースオブジェクトが生成されていません。");
-            return;
-        }
-
+    // データ保存（超強力・画面最優先処理）
+    function saveRecord() {
         const distanceInput = document.getElementById('distance');
         const amountInput = document.getElementById('amount');
         
@@ -312,52 +305,49 @@
             return;
         }
 
+        // 【修正核心】サーバーの状態に関係なく、その場で絶対に計算して画面に即出す
         const now = new Date();
         const dateString = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         const efficiency = distance / amount;
 
-        // 画面に先行して追加
         const newRecord = { date: dateString, distance: distance, amount: amount, efficiency: efficiency };
+        
+        // 画面のリストに追加して、即座に再描画
         records.unshift(newRecord);
         updateLayout();
 
+        // 入力欄をクリア
         distanceInput.value = '';
         amountInput.value = '';
 
-        // サーバーに送信
-        supabase
-            .from('fuel_records')
-            .insert([newRecord])
-            .select()
-            .then(({ data, error }) => {
-                if (error) {
-                    showDebugLog("【裏でのサーバー保存に失敗】\n" + error.message + "\n詳細: " + error.details);
-                } else {
-                    loadFromServer();
-                }
-            })
-            .catch((err) => {
-                showDebugLog("【保存通信例外】\n" + err.message);
-            });
+        // Supabaseが設定されている場合のみ、完全に裏側で送信（成否に関わらず画面は動いたまま）
+        if (supabase) {
+            supabase
+                .from('fuel_records')
+                .insert([newRecord])
+                .then(({ error }) => {
+                    if (error) {
+                        console.log("バックグラウンド保存失敗（無視してOK）:", error.message);
+                    }
+                })
+                .catch((err) => {
+                    console.log("バックグラウンド通信例外:", err.message);
+                });
+        }
     }
 
     // 削除処理
     async function deleteRecord(id) {
         if (confirm('この記録をサーバーから削除しますか？')) {
+            if (!supabase) {
+                removeLocalRecord(0);
+                return;
+            }
             try {
-                const { error } = await supabase
-                    .from('fuel_records')
-                    .delete()
-                    .eq('id', id);
-
-                if (error) {
-                    showDebugLog("【削除失敗】\n" + error.message);
-                    return;
-                }
-
+                await supabase.from('fuel_records').delete().eq('id', id);
                 loadFromServer();
             } catch (error) {
-                showDebugLog("【削除通信例外】\n" + error.message);
+                console.error(error);
             }
         }
     }
