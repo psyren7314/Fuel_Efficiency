@@ -1,19 +1,21 @@
 <!DOCTYPE html>
-<script>
-    // 1. アップデート時は下の番号を変更してください
-    const APP_VERSION = "Beta#0.29";
-
-    // 2. ご自身のSupabase接続情報をここに貼り付けてください
-    const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co"; 
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwZHBveHJ3dWdxZW9ia2J5aHp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MTQyNTUsImV4cCI6MjA5NzE5MDI1NX0.6bmXeAWZ5bZVa7oPT6upM3_CpXoHIeU8fIYwGiT9scw";
-</script>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>燃費計算</title>
     
-    <script> document.title = "燃費計算 (" + APP_VERSION + ")"; </script>
+    <script>
+        // アップデート時は下の番号を変更してください
+        const APP_VERSION = "#20";
+        document.title = "燃費計算 (" + APP_VERSION + ")";
+    </script>
+
+    <script>
+        document.write('<script src="config.js?v=' + encodeURIComponent(APP_VERSION) + '"><\/script>');
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
         :root {
@@ -54,7 +56,6 @@
             margin-left: 10px;
         }
 
-        /* 通信状態バーのデザイン */
         .status-bar {
             font-size: 14px;
             color: #8e8e93;
@@ -73,7 +74,6 @@
         .status-connected { background-color: #e5f9eb; color: var(--accent-color); }
         .status-disconnected { background-color: #ffe5e5; color: var(--danger-color); }
 
-        /* 新設：エラーコードWeb上表記エリアのスタイル */
         .status-error-text {
             font-size: 13px;
             color: var(--danger-color);
@@ -82,7 +82,7 @@
             padding: 8px 12px;
             border-radius: 4px;
             margin-bottom: 20px;
-            display: none; /* 通常時は非表示 */
+            display: none;
             word-break: break-all;
             font-family: monospace;
         }
@@ -195,8 +195,6 @@
             width: auto;
         }
     </style>
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -235,7 +233,7 @@
     let supabase;
     let records = [];
 
-    // 画面のステータス表示を切り替え、エラーがあれば表記する関数
+    // ステータス更新関数
     function updateStatusDisplay(type, text, errorMsg = '') {
         const badge = document.getElementById('connectionStatus');
         const errorDisplay = document.getElementById('statusErrorDisplay');
@@ -259,14 +257,15 @@
     // 初期化処理
     window.addEventListener('DOMContentLoaded', () => {
         try {
-            const isDefaultUrl = (SUPABASE_URL.indexOf("YOUR_PROJECT_ID") !== -1);
+            // インクルードした変数があるかチェック
+            const urlConfigured = (typeof SUPABASE_CONFIG_URL !== 'undefined' && SUPABASE_CONFIG_URL.indexOf("YOUR_PROJECT_ID") === -1 && SUPABASE_CONFIG_URL !== '');
             
-            if (window.supabase && !isDefaultUrl) {
+            if (window.supabase && urlConfigured) {
                 updateStatusDisplay('connecting', '🟡 接続中...');
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                supabase = window.supabase.createClient(SUPABASE_CONFIG_URL, SUPABASE_CONFIG_ANON_KEY);
                 loadFromServer();
             } else {
-                updateStatusDisplay('disconnected', '🔴 未接続 (接続情報が初期状態です)');
+                updateStatusDisplay('disconnected', '🔴 未接続 (config.js の接続情報が初期状態です)');
             }
         } catch (e) {
             updateStatusDisplay('disconnected', '🔴 未接続 (初期化失敗)', e.message);
@@ -277,17 +276,17 @@
     async function loadFromServer() {
         if (!supabase) return;
         try {
-            const { data, error } = await supabase
-                .from('fuel_records')
-                .select('*')
-                .order('id', { ascending: false });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('サーバーの応答時間を超過しました(タイムアウト)')), 5000));
+            const fetchPromise = supabase.from('fuel_records').select('*').order('id', { ascending: false });
+
+            const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
             if (!error) {
                 records = data || [];
                 updateLayout();
-                updateStatusDisplay('connected', '🟢 接続完了'); // エラー表記なしでクリーンに完了
+                updateStatusDisplay('connected', '🟢 接続完了');
             } else {
-                updateStatusDisplay('disconnected', '🔴 未接続 (データ取得失敗)', error.message + " (Code: " + error.code + ")");
+                updateStatusDisplay('disconnected', '🔴 未接続 (データ取得失敗)', error.message);
             }
         } catch (error) {
             updateStatusDisplay('disconnected', '🔴 未接続 (通信例外)', error.message);
@@ -342,14 +341,12 @@
 
         const newRecord = { date: dateString, distance: distance, amount: amount, efficiency: efficiency };
         
-        // 画面に即座に反映
         records.unshift(newRecord);
         updateLayout();
 
         distanceInput.value = '';
         amountInput.value = '';
 
-        // Supabaseへ裏側で送信
         if (supabase) {
             updateStatusDisplay('connecting', '🟡 送信中...');
             supabase
@@ -357,7 +354,7 @@
                 .insert([newRecord])
                 .then(({ error }) => {
                     if (error) {
-                        updateStatusDisplay('disconnected', '🔴 未接続 (保存失敗)', error.message + " (" + error.details + ")");
+                        updateStatusDisplay('disconnected', '🔴 未接続 (保存失敗)', error.message);
                     } else {
                         updateStatusDisplay('connected', '🟢 接続完了');
                         loadFromServer();
