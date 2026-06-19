@@ -22,6 +22,8 @@
             --card-bg: #ffffff;
             --text-color: #1c1c1e;
             --accent-color: #34c759;
+            --warning-color: #ff9500;
+            --danger-color: #ff3b30;
         }
 
         body {
@@ -41,7 +43,7 @@
 
         h1 {
             font-size: 28px;
-            margin-bottom: 20px;
+            margin-bottom: 5px;
             font-weight: 700;
         }
 
@@ -50,6 +52,39 @@
             color: #8e8e93;
             font-weight: normal;
             margin-left: 10px;
+        }
+
+        /* 通信状態バーのデザイン */
+        .status-bar {
+            font-size: 14px;
+            color: #8e8e93;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .status-badge {
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+        .status-connecting { background-color: #ffe5cc; color: var(--warning-color); }
+        .status-connected { background-color: #e5f9eb; color: var(--accent-color); }
+        .status-disconnected { background-color: #ffe5e5; color: var(--danger-color); }
+
+        /* 新設：エラーコードWeb上表記エリアのスタイル */
+        .status-error-text {
+            font-size: 13px;
+            color: var(--danger-color);
+            background-color: #fff2f2;
+            border-left: 3px solid var(--danger-color);
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none; /* 通常時は非表示 */
+            word-break: break-all;
+            font-family: monospace;
         }
 
         .card {
@@ -159,29 +194,6 @@
             cursor: pointer;
             width: auto;
         }
-
-        .debug-box {
-            background-color: #fff2f2;
-            border: 2px dashed #ff3b30;
-            border-radius: 12px;
-            padding: 15px;
-            margin-top: 30px;
-            display: none;
-        }
-        .debug-title {
-            color: #ff3b30;
-            font-weight: bold;
-            margin-top: 0;
-            margin-bottom: 10px;
-            font-size: 16px;
-        }
-        .debug-content {
-            font-family: monospace;
-            font-size: 13px;
-            color: #333;
-            white-space: pre-wrap;
-            margin: 0;
-        }
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -190,6 +202,12 @@
 
 <div class="container">
     <h1>燃費計算<span class="commit-badge"><script>document.write(APP_VERSION);</script></span></h1>
+    
+    <div class="status-bar">
+        通信状態: <span id="connectionStatus" class="status-badge status-connecting">🟡 接続中...</span>
+    </div>
+    
+    <div id="statusErrorDisplay" class="status-error-text"></div>
 
     <div class="card">
         <div class="card-title">新規記録</div>
@@ -211,37 +229,47 @@
         <ul id="recordList" class="record-list">
             </ul>
     </div>
-
-    <div id="debugBox" class="debug-box">
-        <div class="debug-title">⚠️ システムデバッグログ</div>
-        <pre id="debugContent" class="debug-content"></pre>
-    </div>
 </div>
 
 <script>
     let supabase;
     let records = [];
 
-    function showDebugLog(text) {
-        const box = document.getElementById('debugBox');
-        const content = document.getElementById('debugContent');
-        if (box && content) {
-            box.style.display = 'block';
-            content.innerText = text;
+    // 画面のステータス表示を切り替え、エラーがあれば表記する関数
+    function updateStatusDisplay(type, text, errorMsg = '') {
+        const badge = document.getElementById('connectionStatus');
+        const errorDisplay = document.getElementById('statusErrorDisplay');
+        
+        if (badge) {
+            badge.innerText = text;
+            badge.className = 'status-badge status-' + type;
+        }
+        
+        if (errorDisplay) {
+            if (errorMsg) {
+                errorDisplay.innerText = "⚠️ エラー詳細: " + errorMsg;
+                errorDisplay.style.display = 'block';
+            } else {
+                errorDisplay.innerText = "";
+                errorDisplay.style.display = 'none';
+            }
         }
     }
 
-    // 画面起動時の処理
+    // 初期化処理
     window.addEventListener('DOMContentLoaded', () => {
         try {
-            if (window.supabase && SUPABASE_URL.indexOf("YOUR_PROJECT_ID") === -1) {
+            const isDefaultUrl = (SUPABASE_URL.indexOf("YOUR_PROJECT_ID") !== -1);
+            
+            if (window.supabase && !isDefaultUrl) {
+                updateStatusDisplay('connecting', '🟡 接続中...');
                 supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 loadFromServer();
             } else {
-                console.log("Supabase未設定のためローカルモードで動作します。");
+                updateStatusDisplay('disconnected', '🔴 未接続 (接続情報が初期状態です)');
             }
         } catch (e) {
-            console.log("初期化スキップ:", e.message);
+            updateStatusDisplay('disconnected', '🔴 未接続 (初期化失敗)', e.message);
         }
     });
 
@@ -254,12 +282,15 @@
                 .select('*')
                 .order('id', { ascending: false });
 
-            if (!error && data) {
-                records = data;
+            if (!error) {
+                records = data || [];
                 updateLayout();
+                updateStatusDisplay('connected', '🟢 接続完了'); // エラー表記なしでクリーンに完了
+            } else {
+                updateStatusDisplay('disconnected', '🔴 未接続 (データ取得失敗)', error.message + " (Code: " + error.code + ")");
             }
         } catch (error) {
-            console.error(error);
+            updateStatusDisplay('disconnected', '🔴 未接続 (通信例外)', error.message);
         }
     }
 
@@ -292,7 +323,7 @@
         });
     }
 
-    // データ保存（超強力・画面最優先処理）
+    // データ保存処理
     function saveRecord() {
         const distanceInput = document.getElementById('distance');
         const amountInput = document.getElementById('amount');
@@ -305,33 +336,35 @@
             return;
         }
 
-        // 【修正核心】サーバーの状態に関係なく、その場で絶対に計算して画面に即出す
         const now = new Date();
         const dateString = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         const efficiency = distance / amount;
 
         const newRecord = { date: dateString, distance: distance, amount: amount, efficiency: efficiency };
         
-        // 画面のリストに追加して、即座に再描画
+        // 画面に即座に反映
         records.unshift(newRecord);
         updateLayout();
 
-        // 入力欄をクリア
         distanceInput.value = '';
         amountInput.value = '';
 
-        // Supabaseが設定されている場合のみ、完全に裏側で送信（成否に関わらず画面は動いたまま）
+        // Supabaseへ裏側で送信
         if (supabase) {
+            updateStatusDisplay('connecting', '🟡 送信中...');
             supabase
                 .from('fuel_records')
                 .insert([newRecord])
                 .then(({ error }) => {
                     if (error) {
-                        console.log("バックグラウンド保存失敗（無視してOK）:", error.message);
+                        updateStatusDisplay('disconnected', '🔴 未接続 (保存失敗)', error.message + " (" + error.details + ")");
+                    } else {
+                        updateStatusDisplay('connected', '🟢 接続完了');
+                        loadFromServer();
                     }
                 })
                 .catch((err) => {
-                    console.log("バックグラウンド通信例外:", err.message);
+                    updateStatusDisplay('disconnected', '🔴 未接続 (保存例外)', err.message);
                 });
         }
     }
@@ -344,10 +377,16 @@
                 return;
             }
             try {
-                await supabase.from('fuel_records').delete().eq('id', id);
-                loadFromServer();
+                updateStatusDisplay('connecting', '🟡 削除中...');
+                const { error } = await supabase.from('fuel_records').delete().eq('id', id);
+                if (error) {
+                    updateStatusDisplay('disconnected', '🔴 未接続 (削除失敗)', error.message);
+                } else {
+                    updateStatusDisplay('connected', '🟢 接続完了');
+                    loadFromServer();
+                }
             } catch (error) {
-                console.error(error);
+                updateStatusDisplay('disconnected', '🔴 未接続 (削除例外)', error.message);
             }
         }
     }
