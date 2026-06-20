@@ -1,9 +1,12 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>車種管理ページ</title>
-    <script src="config.js"></script><script src="credentials.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="credentials.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: -apple-system, sans-serif; background-color: #f2f2f7; margin: 0; padding: 20px; display: flex; justify-content: center; }
         .container { width: 100%; max-width: 550px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -15,7 +18,7 @@
         button { width: 100%; padding: 12px; background-color: #34c759; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin-bottom: 10px; }
         .car-item { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #eee; align-items: center; background-color: #fff; margin-bottom: 5px; border-radius: 8px; }
         .order-input { width: 50px !important; text-align: center; margin-right: 10px; }
-        .toggle-btn { width: auto; padding: 6px 12px; font-size: 12px; font-weight: bold; background-color: #007aff; }
+        .toggle-btn { width: auto; padding: 6px 12px; font-size: 12px; font-weight: bold; background-color: #007aff; border: none; border-radius: 6px; color: white; cursor: pointer; }
         .toggle-btn.off { background-color: #8e8e93; }
         .delete-btn { width: auto; padding: 6px 12px; background-color: #ff3b30; font-size: 12px; }
         .user-tab { background-color: #007aff; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
@@ -43,9 +46,9 @@
     <div class="user-tab">
         <label>2. 管理対象ユーザーを選択</label>
         <select id="targetUser" onchange="loadUserSettings()" style="width:100%; margin-top:5px; padding:8px; border-radius:5px;">
-            <option value="admin">管理者 (admin)</option>
-            <option value="user1">ユーザー1 (user1)</option>
-            <option value="user2">ユーザー2 (user2)</option>
+            <option value="admin">管理者 (ID: admin)</option>
+            <option value="user1">ユーザー1 (ID: user1)</option>
+            <option value="user2">ユーザー2 (ID: user2)</option>
         </select>
     </div>
 
@@ -82,52 +85,4 @@
 
     function updateMasterListUI() {
         const list = document.getElementById('masterList');
-        list.innerHTML = masterCars.map(c => `<li>・${c.name} (${c.fuel_type}) <a href="#" style="color:red; font-size:10px;" onclick="deleteMasterCar(${c.id})">[削除]</a></li>`).join('');
-    }
-
-    async function addMasterCar() {
-        const name = document.getElementById('masterCarName').value.trim(); const fuel = document.getElementById('masterFuel').value;
-        if (!name) return;
-        await supabaseClient.from('cars').insert([{ name, fuel_type: fuel }]);
-        document.getElementById('masterCarName').value = ''; refreshAll();
-    }
-
-    async function deleteMasterCar(id) { if(confirm('マスターから削除しますか？設定も消えます。')){ await supabaseClient.from('cars').delete().eq('id', id); refreshAll(); } }
-
-    // ⭕ ユーザー個別の設定をロード
-    async function loadUserSettings() {
-        const target = document.getElementById('targetUser').value;
-        const { data } = await supabaseClient.from('user_car_settings').select('*').eq('user_id', target);
-        userSettings = data || [];
-        updateSettingsUI();
-    }
-
-    function updateSettingsUI() {
-        const container = document.getElementById('settingList'); container.innerHTML = '';
-        masterCars.forEach(master => {
-            const set = userSettings.find(s => s.car_name === master.name);
-            const visible = set ? set.is_visible : false;
-            const order = set ? set.sort_order : 99;
-            container.innerHTML += `
-                <div class="car-item">
-                    <div>
-                        <input type="number" class="order-input" value="${order}" onchange="saveConfig('${master.name}', this.value, ${visible})">
-                        <strong>${master.name}</strong>
-                    </div>
-                    <button class="toggle-btn ${visible ? '' : 'off'}" onclick="saveConfig('${master.name}', ${order}, ${!visible})">
-                        ${visible ? '🟢 表示' : '🔘 非表示'}
-                    </button>
-                </div>`;
-        });
-    }
-
-    async function saveConfig(carName, order, visible) {
-        const target = document.getElementById('targetUser').value;
-        const { error } = await supabaseClient.from('user_car_settings').upsert({
-            user_id: target, car_name: carName, sort_order: parseInt(order), is_visible: visible
-        }, { onConflict: 'user_id, car_name' });
-        loadUserSettings();
-    }
-</script>
-</body>
-</html>
+        list.innerHTML = masterCars.map(c =>
