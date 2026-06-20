@@ -43,10 +43,7 @@
     <div class="user-tab">
         <label>2. 表示順・表示切替を設定する対象ユーザー</label>
         <select id="targetUser" onchange="updateSettingsUI()" style="width:100%; margin-top:5px; padding:8px; border-radius:5px;">
-            <option value="admin">管理者 (ID: admin)</option>
-            <option value="user1">ユーザー1 (ID: user1)</option>
-            <option value="user2">ユーザー2 (ID: user2)</option>
-        </select>
+            </select>
     </div>
 
     <h3>3. 選択中ユーザーへの表示・並び順の個別設定</h3>
@@ -59,8 +56,27 @@
 <script>
     let supabaseClient; let masterCars = [];
     function cleanConfigStr(str) { return str ? str.trim().replace(/\s+/g, '').replace(/\/$/, '') : ''; }
+    
+    // ⭕ credentials.js から実際のIDを読み込んでプルダウンを動的生成する
+    function setupUserDropdown() {
+        const selector = document.getElementById('targetUser');
+        selector.innerHTML = '';
+        
+        const addOption = (id, label) => {
+            if (typeof id !== 'undefined' && id) {
+                const val = id.trim().toLowerCase();
+                selector.innerHTML += `<option value="${val}">${label} (ID: ${val})</option>`;
+            }
+        };
+        
+        addOption(typeof ADMIN_ID !== 'undefined' ? ADMIN_ID : 'admin', '管理者');
+        addOption(typeof USER_ID !== 'undefined' ? USER_ID : '', 'ユーザー1');
+        addOption(typeof USER2_ID !== 'undefined' ? USER2_ID : '', 'ユーザー2');
+    }
+
     window.addEventListener('DOMContentLoaded', () => { 
         supabaseClient = window.supabase.createClient(cleanConfigStr(SUPABASE_CONFIG_URL), cleanConfigStr(SUPABASE_CONFIG_ANON_KEY)); 
+        setupUserDropdown();
     });
 
     async function hash(pw) {
@@ -72,7 +88,7 @@
     async function login() {
         if (typeof ADMIN_ID === 'undefined') { alert("⚠️ 認証同期中。数秒お待ちください。"); return; }
         const id = document.getElementById('userId').value.trim(); const pw = document.getElementById('userPw').value;
-        if (id === ADMIN_ID && await hash(pw) === ADMIN_PW_HASH) {
+        if (id.toLowerCase() === ADMIN_ID.toLowerCase() && await hash(pw) === ADMIN_PW_HASH) {
             document.getElementById('loginPanel').style.display = 'none'; document.getElementById('adminPanel').style.display = 'block';
             refreshAll();
         } else { alert("管理者権限がありません"); }
@@ -108,9 +124,8 @@
         } 
     }
 
-    // ⭕ 変更：単一テーブル内のJSON（user_settings）を読み解いて、選択中のユーザー用のUIを作る
     function updateSettingsUI() {
-        const target = document.getElementById('targetUser').value;
+        const target = document.getElementById('targetUser').value.toLowerCase();
         const container = document.getElementById('settingList'); container.innerHTML = '';
         
         if (masterCars.length === 0) {
@@ -119,8 +134,15 @@
         }
 
         masterCars.forEach(car => {
-            const settings = car.user_settings || {};
-            const myConfig = settings[target] || { order: 1, show: false }; // 設定がなければ初期値
+            let settings = car.user_settings || {};
+            if (typeof settings === 'string') {
+                try { settings = JSON.parse(settings); } catch(e) { settings = {}; }
+            }
+            
+            const normalizedSettings = {};
+            Object.keys(settings).forEach(k => { normalizedSettings[k.toLowerCase()] = settings[k]; });
+
+            const myConfig = normalizedSettings[target] || { order: 1, show: false };
             const visible = myConfig.show === true;
             const order = myConfig.order || 1;
 
@@ -139,23 +161,27 @@
         });
     }
 
-    // ⭕ 変更：対象行のJSONデータの一部分（選択ユーザーの設定部分）だけをスマートに上書き保存する
     async function saveConfig(id, order, visible) {
         if (!supabaseClient) return;
-        const target = document.getElementById('targetUser').value;
+        const target = document.getElementById('targetUser').value.toLowerCase();
         
-        // 元の車のデータを検索
         const originalCar = masterCars.find(c => c.id === id);
         if (!originalCar) return;
 
-        const currentSettings = originalCar.user_settings || {};
-        // 選択されたユーザーの設定だけを上書き
-        currentSettings[target] = {
+        let currentSettings = originalCar.user_settings || {};
+        if (typeof currentSettings === 'string') {
+            try { currentSettings = JSON.parse(currentSettings); } catch(e) { currentSettings = {}; }
+        }
+
+        const newSettings = {};
+        Object.keys(currentSettings).forEach(k => { newSettings[k.toLowerCase()] = currentSettings[k]; });
+
+        newSettings[target] = {
             order: parseInt(order) || 1,
             show: visible
         };
 
-        await supabaseClient.from('cars').update({ user_settings: currentSettings }).eq('id', id);
+        await supabaseClient.from('cars').update({ user_settings: newSettings }).eq('id', id);
         refreshAll();
     }
 </script>
