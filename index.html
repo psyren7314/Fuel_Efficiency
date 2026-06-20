@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // アップデート時は下の番号を変更してください
-    const APP_VERSION = "#37";
+    const APP_VERSION = "#41";
 </script>
 <html lang="ja">
 <head>
@@ -11,9 +11,7 @@
     
     <script> document.title = "燃費計算 (" + APP_VERSION + ")"; </script>
     <script src="config.js"></script>
-    
     <script src="credentials.js"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
@@ -38,14 +36,9 @@
         }
 
         .container { width: 100%; max-width: 500px; }
-
-        /* ログイン画面専用のスタイル */
         .login-panel { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 40px; }
         .login-panel h2 { margin-top: 0; margin-bottom: 20px; font-size: 22px; text-align: center; }
-
-        /* メインアプリ画面（初期状態は非表示） */
         #mainApp { display: none; }
-
         .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
         h1 { font-size: 26px; margin: 0; font-weight: 700; }
         .commit-badge { font-size: 14px; color: #8e8e93; font-weight: normal; margin-left: 8px; }
@@ -87,12 +80,8 @@
         .input-group { display: flex; align-items: center; margin-bottom: 15px; position: relative; }
         .input-group label { width: 90px; font-weight: 500; }
         .input-group input, .input-group select { flex: 1; padding: 10px; border: 1px solid #d1d1d6; border-radius: 8px; font-size: 16px; background-color: #fafafc; outline: none; box-sizing: border-box; }
-
-        .input-group select {
-            padding-right: 30px;
-            -webkit-appearance: none;
-            appearance: none;
-        }
+        .input-group select { padding-right: 30px; -webkit-appearance: none; appearance: none; }
+        .input-group .unit { width: 45px; text-align: right; color: #8e8e93; font-size: 14px; }
 
         button.primary-btn { width: 100%; padding: 14px; background-color: var(--primary-color); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
         button.primary-btn:active { opacity: 0.8; }
@@ -112,7 +101,6 @@
 <body>
 
 <div class="container">
-    
     <div id="loginAuthPanel" class="login-panel">
         <h2>🔒 燃費計算アプリ 認証</h2>
         <div class="input-group">
@@ -172,11 +160,11 @@
 <script>
     let supabaseClient;
     let records = [];
-    let carObjects = []; // 車種名と油種のペアを保持するオブジェクト配列に変更
+    let carObjects = [];
+    let currentLoginUser = '';
 
     function cleanConfigStr(str) { return str ? str.trim().replace(/\s+/g, '').replace(/\/$/, '') : ''; }
 
-    // パスワードハッシュ化関数
     async function calcHash(password) {
         const msgUint8 = new TextEncoder().encode(password);
         const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
@@ -184,22 +172,27 @@
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
-    // 🔑 サイト全体のアクセス認証処理
     async function authenticateSite() {
         if (typeof USER_ID === 'undefined' || typeof ADMIN_ID === 'undefined') {
             alert("⚠️ サーバーからの認証キーを読み込み中です。あと数秒待ってからもう一度お試しください。");
             return;
         }
-
         try {
             const inputId = document.getElementById('siteUserId').value.trim();
             const inputPw = document.getElementById('siteUserPw').value;
             const hashedPw = await calcHash(inputPw);
 
-            const isUserValid = (inputId === USER_ID && hashedPw === USER_PW_HASH);
-            const isAdminValid = (inputId === ADMIN_ID && hashedPw === ADMIN_PW_HASH);
+            let isValid = false;
+            if (inputId === USER_ID && hashedPw === USER_PW_HASH) {
+                isValid = true; // user1
+            } else if (typeof USER2_ID !== 'undefined' && inputId === USER2_ID && hashedPw === USER2_PW_HASH) {
+                isValid = true; // user2
+            } else if (inputId === ADMIN_ID && hashedPw === ADMIN_PW_HASH) {
+                isValid = true; // ⭕ adminでのログインも完全サポート開通
+            }
 
-            if (isUserValid || isAdminValid) {
+            if (isValid) {
+                currentLoginUser = inputId;
                 document.getElementById('loginAuthPanel').style.display = 'none';
                 document.getElementById('mainApp').style.display = 'block';
                 initializeSupabase();
@@ -221,7 +214,6 @@
         }
     }
 
-    // Supabase初期化
     async function initializeSupabase() {
         try {
             const hasConfig = (typeof SUPABASE_CONFIG_URL !== 'undefined' && typeof SUPABASE_CONFIG_ANON_KEY !== 'undefined');
@@ -243,15 +235,21 @@
         }
     }
 
-    // サーバーから車種と油種の情報を取得
+    // ⭕ ログイン中のユーザー（admin / user1 / user2）に応じた並び順・表示車両リストを取得
     async function fetchCars() {
         if (!supabaseClient) return;
-        const { data, error } = await supabaseClient.from('cars').select('name, fuel_type').order('id');
+        const { data, error } = await supabaseClient
+            .from('cars')
+            .select('name, fuel_type')
+            .eq('is_visible', true)
+            .eq('owner_id', currentLoginUser) 
+            .order('sort_order', { ascending: true });
+        
         const selector = document.getElementById('mainCarSelector');
         selector.innerHTML = '';
         
         if (!error && data && data.length > 0) {
-            carObjects = data; // 全ての車両データを保存
+            carObjects = data;
             carObjects.forEach(car => {
                 selector.innerHTML += `<option value="${car.name}">${car.name}</option>`;
             });
@@ -267,7 +265,7 @@
         
         try {
             const timeoutPromise = new Promise((_, r) => setTimeout(() => r(new Error('タイムアウト')), 5000));
-            const fetchPromise = supabaseClient.from('fuel_records').select('*').eq('car_name', currentCar).order('id', { ascending: false });
+            const fetchPromise = supabaseClient.from('fuel_records').select('*').eq('car_name', currentCar).eq('owner_id', currentLoginUser).order('id', { ascending: false });
 
             const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -328,7 +326,6 @@
         if (isNaN(distance) || distance <= 0 || isNaN(amount) || amount <= 0) return alert('距離と給油量には正しい数値を入力してください。');
         if (isNaN(price) || price < 0) price = 0;
 
-        // ⭕ 選択されている車の油種を、あらかじめ取得してあるリストから自動検索
         const selectedCarObj = carObjects.find(c => c.name === car_name);
         const fuel_type = selectedCarObj ? selectedCarObj.fuel_type : 'レギュラー';
 
@@ -337,9 +334,10 @@
         
         const newRecord = { 
             date: dateString, distance: distance, amount: amount, 
-            price: price, total_cost: price * amount, fuel_type: fuel_type, // 油種が自動セットされる
+            price: price, total_cost: price * amount, fuel_type: fuel_type,
             efficiency: distance / amount,
-            car_name: car_name
+            car_name: car_name,
+            owner_id: currentLoginUser
         };
         
         records.unshift(newRecord);
