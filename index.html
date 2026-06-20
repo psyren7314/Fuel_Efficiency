@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // アップデート時は下の番号を変更してください
-    const APP_VERSION = "#50";
+    const APP_VERSION = "#51";
 </script>
 <html lang="ja">
 <head>
@@ -87,7 +87,136 @@
 <script>
     let supabaseClient; let records = []; let carObjects = []; let currentLoginUser = '';
     function cleanConfigStr(str) { return str ? str.trim().replace(/\s+/g, '').replace(/\/$/, '') : ''; }
-    
-    const tempUrl = typeof SUPABASE_CONFIG_URL !== 'undefined' ? cleanConfigStr(SUPABASE_CONFIG_URL) : '';
-    const tempKey = typeof SUPABASE_CONFIG_ANON_KEY !== 'undefined' ? cleanConfigStr(SUPABASE_CONFIG_ANON_KEY) : '';
-    if (tempUrl &&
+
+    // ⭕ 起動時にクライアントを確実に準備
+    function getClient() {
+        if (!supabaseClient) {
+            const tempUrl = typeof SUPABASE_CONFIG_URL !== 'undefined' ? cleanConfigStr(SUPABASE_CONFIG_URL) : '';
+            const tempKey = typeof SUPABASE_CONFIG_ANON_KEY !== 'undefined' ? cleanConfigStr(SUPABASE_CONFIG_ANON_KEY) : '';
+            if (tempUrl && tempKey) { supabaseClient = window.supabase.createClient(tempUrl, tempKey); }
+        }
+        return supabaseClient;
+    }
+
+    async function calcHash(password) {
+        const msgUint8 = new TextEncoder().encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+        return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // ⭕ ログイン処理を絶対にフリーズさせないよう安全に修正
+    function writeLoginLog(userId, isSuccess) {
+        setTimeout(async () => {
+            const client = getClient();
+            if (!client) return;
+            try { 
+                await client.from('login_logs').insert([{ user_id: userId, status: isSuccess ? 'success' : 'failed', page_type: 'index' }]); 
+            } catch (e) { console.warn("ログ保存スキップ:", e); }
+        }, 10);
+    }
+
+    async function authenticateSite() {
+        if (typeof USER_ID === 'undefined') { alert("⚠️ 認証キー同期中。数秒お待ちください。"); return; }
+        const id = document.getElementById('siteUserId').value.trim(); const pw = document.getElementById('siteUserPw').value; const hash = await calcHash(pw);
+        let valid = false;
+        
+        if (id.toLowerCase() === ADMIN_ID.toLowerCase() && hash === ADMIN_PW_HASH) valid = true;
+        else if (id.toLowerCase() === USER_ID.toLowerCase() && hash === USER_PW_HASH) valid = true;
+        else if (typeof USER2_ID !== 'undefined' && id.toLowerCase() === USER2_ID.toLowerCase() && hash === USER2_PW_HASH) valid = true;
+        
+        // ログを記録（裏側で安全に実行）
+        writeLoginLog(id || '(空欄)', valid);
+
+        if (valid) {
+            currentLoginUser = id.toLowerCase();
+            sessionStorage.setItem('currentFuelAppUser', currentLoginUser);
+            document.getElementById('loginAuthPanel').style.display = 'none'; document.getElementById('mainApp').style.display = 'block';
+            document.getElementById('loginUserDisplay').innerText = "👤 ユーザー: " + currentLoginUser;
+            await fetchCars(); loadRecords();
+        } else { alert("認証に失敗しました"); }
+    }
+
+    function updateStatusDisplay(type, text, errorMsg = '') {
+        const badge = document.getElementById('connectionStatus'); const errDisp = document.getElementById('statusErrorDisplay');
+        if (badge) { badge.innerText = text; badge.className = 'status-badge status-' + type; }
+        if (errDisp) { if (errorMsg) { errDisp.innerText = errorMsg; errDisp.style.display = 'block'; } else { errDisp.style.display = 'none'; } }
+    }
+
+    async function fetchCars() {
+        const client = getClient();
+        if (!client) return;
+        const { data, error } = await client.from('cars').select('*');
+        const selector = document.getElementById('mainCarSelector'); selector.innerHTML = '';
+        if (error) { updateStatusDisplay('disconnected', '🔴 車両取得エラー', error.message); return; }
+        if (!data || data.length === 0) { updateStatusDisplay('connected', '🟢 接続完了 (マスター未登録)'); return; }
+
+        carObjects = [];
+        let debugText = `マスター総数: ${data.length}件 / ログイン中: ${currentLoginUser}\n`;
+
+        data.forEach(car => {
+            let settings = car.user_settings || {};
+            if (typeof settings === 'string') { try { settings = JSON.parse(settings); } catch(e) {} }
+            const normalizedSettings = {};
+            Object.keys(settings).forEach(k => { normalizedSettings[k.toLowerCase()] = settings[k]; });
+            const myConfig = normalizedSettings[currentLoginUser.toLowerCase()];
+            if (myConfig) {
+                debugText += `・${car.name}: show=${myConfig.show}, order=${myConfig.order}\n`;
+                if (myConfig.show === true) {
+                    carObjects.push({ name: car.name, fuel_type: car.fuel_type, order: parseInt(myConfig.order) || 1 });
+                }
+            } else { debugText += `・${car.name}: 設定が存在しません\n`; }
+        });
+        
+        carObjects.sort((a, b) => a.order - b.order);
+        if (carObjects.length > 0) {
+            carObjects.forEach(car => { selector.innerHTML += `<option value="${car.name}">${car.name}</option>`; });
+            updateStatusDisplay('connected', '🟢 接続完了');
+        } else { 
+            selector.innerHTML = `<option value="未設定">表示設定された車両なし</option>`;
+            updateStatusDisplay('connected', '🟡 車両リスト非表示状態', `🚨 診断情報:\n${debugText}`);
+        }
+    }
+
+    async function loadRecords() {
+        const client = getClient();
+        if (!client) return;
+        const currentCar = document.getElementById('mainCarSelector').value;
+        if (!currentCar || currentCar === '未設定' || currentCar === '表示設定された車両なし') return;
+        try {
+            const { data, error } = await client.from('fuel_records').select('*').eq('car_name', currentCar).order('id', { ascending: false });
+            if (!error) { records = data || []; updateLayout(); }
+        } catch (error) {}
+    }
+
+    function updateLayout() {
+        const list = document.getElementById('recordList'); list.innerHTML = '';
+        if (records.length === 0) { list.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:20px 0;">記録なし</li>'; return; }
+        records.forEach((record) => {
+            let fuelTag = `<span class="fuel-tag">${record.fuel_type}</span>`;
+            let costTag = `<span class="cost-tag">${Math.round(record.total_cost || 0).toLocaleString()}円</span>`;
+            let userTag = `<span class="user-tag">👤 ${record.owner_id || '不明'}</span>`;
+            list.innerHTML += `<li class="record-item"><div class="record-info"><div class="date">${record.date}</div><div class="details"><span>${record.distance}km / ${record.amount}L</span>${fuelTag}${costTag}${userTag}</div></div><div class="record-efficiency"><span class="efficiency-val">${Number(record.efficiency).toFixed(2)} km/L</span><button class="delete-btn" onclick="deleteRecord(${record.id})">削除</button></div></li>`;
+        });
+    }
+
+    async function saveRecord() {
+        const client = getClient();
+        if (!client) return;
+        const dist = parseFloat(document.getElementById('distance').value); const amnt = parseFloat(document.getElementById('amount').value); let prc = parseFloat(document.getElementById('price').value) || 0;
+        const carName = document.getElementById('mainCarSelector').value;
+        if (!carName || carName === '未設定' || carName === '表示設定された車両なし') return alert('有効な車両が選択されていません。');
+        if (isNaN(dist) || dist <= 0 || isNaN(amnt) || amnt <= 0) return alert('数値が正しくありません。');
+        const carObj = carObjects.find(c => c.name === carName); const fuel = carObj ? carObj.fuel_type : 'レギュラー';
+        const now = new Date(); const dStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        const newRec = { date: dStr, distance: dist, amount: amnt, price: prc, total_cost: prc * amnt, fuel_type: fuel, efficiency: dist / amnt, car_name: carName, owner_id: currentLoginUser };
+        const { error } = await client.from('fuel_records').insert([newRec]);
+        if (!error) { document.getElementById('distance').value = ''; document.getElementById('amount').value = ''; loadRecords(); }
+    }
+    async function deleteRecord(id) { 
+        const client = getClient();
+        if (!client) return;
+        if (confirm('削除しますか？')) { await client.from('fuel_records').delete().eq('id', id); loadRecords(); } 
+    }
+</script>
+</body>
+</html>
