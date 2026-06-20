@@ -1,11 +1,7 @@
 <!DOCTYPE html>
 <script>
-    // 1. アップデート時は下の番号を変更してください
-    const APP_VERSION = "#26";
-
-    // 2. ご自身のSupabase接続情報を「 " 」の間に貼り付けてください
-    const SUPABASE_URL = 'https://jpdpoxrwugqeobkbyhzw.supabase.co'; 
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpwZHBveHJ3dWdxZW9ia2J5aHp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MTQyNTUsImV4cCI6MjA5NzE5MDI1NX0.6bmXeAWZ5bZVa7oPT6upM3_CpXoHIeU8fIYwGiT9scw';
+    // アップデート時は下の番号を変更してください
+    const APP_VERSION = "Beta#1.00";
 </script>
 <html lang="ja">
 <head>
@@ -14,6 +10,10 @@
     <title>燃費計算</title>
     
     <script> document.title = "燃費計算 (" + APP_VERSION + ")"; </script>
+
+    <script src="config.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
         :root {
@@ -194,8 +194,6 @@
             width: auto;
         }
     </style>
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -231,7 +229,7 @@
 </div>
 
 <script>
-    let supabaseClient; // 名前の競合を防ぐため一意の変数名に変更
+    let supabaseClient;
     let records = [];
 
     // 文字列整形
@@ -261,24 +259,26 @@
         }
     }
 
-    // 最新のライブラリ（v2）に対応した初期化処理
+    // 初期化処理
     window.addEventListener('DOMContentLoaded', () => {
         try {
-            const cleanUrl = cleanConfigStr(SUPABASE_URL);
-            const cleanKey = cleanConfigStr(SUPABASE_ANON_KEY);
-            const isDefaultUrl = (cleanUrl.indexOf("YOUR_PROJECT_ID") !== -1 || cleanUrl === '');
+            // config.jsから読み込まれた変数があるかチェック
+            const hasConfig = (typeof SUPABASE_CONFIG_URL !== 'undefined' && typeof SUPABASE_CONFIG_ANON_KEY !== 'undefined');
             
-            // window.supabase ではなく、CDNから直接読み込まれた supabase オブジェクトを参照
+            const cleanUrl = hasConfig ? cleanConfigStr(SUPABASE_CONFIG_URL) : '';
+            const cleanKey = hasConfig ? cleanConfigStr(SUPABASE_CONFIG_ANON_KEY) : '';
+            
+            const isDefaultUrl = (cleanUrl.indexOf("YOUR_PROJECT_ID") !== -1 || cleanUrl === '');
             const lib = window.supabase || supabase;
 
-            if (lib && !isDefaultUrl) {
+            if (lib && hasConfig && !isDefaultUrl) {
                 updateStatusDisplay('connecting', '🟡 接続中...');
                 supabaseClient = lib.createClient(cleanUrl, cleanKey);
                 loadFromServer();
             } else if (!lib) {
                 updateStatusDisplay('disconnected', '🔴 未接続 (ライブラリの解析に失敗しました)');
             } else {
-                updateStatusDisplay('disconnected', '🔴 未接続 (接続情報が初期状態です)');
+                updateStatusDisplay('disconnected', '🔴 未接続 (config.js の接続情報が未設定、または初期状態です)');
             }
         } catch (e) {
             updateStatusDisplay('disconnected', '🔴 未接続 (初期化失敗)', e.message);
