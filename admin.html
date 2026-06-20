@@ -1,12 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>車種管理ページ</title>
-    <script src="config.js"></script>
-    <script src="credentials.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script><script src="credentials.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: -apple-system, sans-serif; background-color: #f2f2f7; margin: 0; padding: 20px; display: flex; justify-content: center; }
         .container { width: 100%; max-width: 550px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -33,34 +30,38 @@
 </div>
 
 <div class="container" id="adminPanel" style="display:none;">
-    <h1>⚙️ 特権車種管理システム</h1>
+    <h1>⚙️ 特権車種管理システム（決定版）</h1>
 
     <div class="card">
-        <h3>1. 車両マスター登録（全ユーザー共通）</h3>
-        <div class="input-group"><label>車両名</label><input type="text" id="masterCarName" placeholder="例: プリウス"></div>
-        <div class="input-group"><label>油種</label><select id="masterFuel"><option>レギュラー</option><option>ハイオク</option><option>軽油</option></select></div>
-        <button onclick="addMasterCar()">マスターに登録</button>
+        <h3>1. 車両マスター登録（全ユーザー共通の車を追加）</h3>
+        <div class="input-group"><label>共通車両名</label><input type="text" id="masterCarName" placeholder="例: プリウス"></div>
+        <div class="input-group"><label>指定油種</label><select id="masterFuel"><option>レギュラー</option><option>ハイオク</option><option>軽油</option></select></div>
+        <button onclick="addMasterCar()">共通マスターに登録</button>
         <ul id="masterList" style="list-style:none; padding:0; font-size:14px; color:#555;"></ul>
     </div>
 
     <div class="user-tab">
-        <label>2. 管理対象ユーザーを選択</label>
-        <select id="targetUser" onchange="loadUserSettings()" style="width:100%; margin-top:5px; padding:8px; border-radius:5px;">
+        <label>2. 表示順・表示切替を設定する対象ユーザー</label>
+        <select id="targetUser" onchange="updateSettingsUI()" style="width:100%; margin-top:5px; padding:8px; border-radius:5px;">
             <option value="admin">管理者 (ID: admin)</option>
             <option value="user1">ユーザー1 (ID: user1)</option>
             <option value="user2">ユーザー2 (ID: user2)</option>
         </select>
     </div>
 
-    <h3>表示・並び順の個別設定</h3>
+    <h3>3. 選択中ユーザーへの表示・並び順の個別設定</h3>
+    <p style="font-size:12px; color:#8e8e93; margin-top:-10px;">※順序の数字を入力して枠外をタップすると即時並び順が保存されます。</p>
     <div id="settingList"></div>
     
     <button style="background:#8e8e93; margin-top:30px;" onclick="location.href='index.html'">メインページに戻る</button>
 </div>
 
 <script>
-    let supabaseClient; let masterCars = []; let userSettings = [];
-    window.addEventListener('DOMContentLoaded', () => { supabaseClient = window.supabase.createClient(SUPABASE_CONFIG_URL, SUPABASE_CONFIG_ANON_KEY); });
+    let supabaseClient; let masterCars = [];
+    function cleanConfigStr(str) { return str ? str.trim().replace(/\s+/g, '').replace(/\/$/, '') : ''; }
+    window.addEventListener('DOMContentLoaded', () => { 
+        supabaseClient = window.supabase.createClient(cleanConfigStr(SUPABASE_CONFIG_URL), cleanConfigStr(SUPABASE_CONFIG_ANON_KEY)); 
+    });
 
     async function hash(pw) {
         const msgUint8 = new TextEncoder().encode(pw);
@@ -69,6 +70,7 @@
     }
 
     async function login() {
+        if (typeof ADMIN_ID === 'undefined') { alert("⚠️ 認証同期中。数秒お待ちください。"); return; }
         const id = document.getElementById('userId').value.trim(); const pw = document.getElementById('userPw').value;
         if (id === ADMIN_ID && await hash(pw) === ADMIN_PW_HASH) {
             document.getElementById('loginPanel').style.display = 'none'; document.getElementById('adminPanel').style.display = 'block';
@@ -77,12 +79,85 @@
     }
 
     async function refreshAll() {
-        const { data: masters } = await supabaseClient.from('cars').select('*').order('id');
-        masterCars = masters || [];
-        updateMasterListUI();
-        loadUserSettings();
+        if (!supabaseClient) return;
+        const { data, error } = await supabaseClient.from('cars').select('*').order('id');
+        if (!error) {
+            masterCars = data || [];
+            updateMasterListUI();
+            updateSettingsUI();
+        }
     }
 
     function updateMasterListUI() {
         const list = document.getElementById('masterList');
-        list.innerHTML = masterCars.map(c =>
+        if (masterCars.length === 0) { list.innerHTML = '<li>登録された共通車両はありません</li>'; return; }
+        list.innerHTML = masterCars.map(c => `<li>・<strong>${c.name}</strong> (${c.fuel_type}) <a href="#" style="color:red; font-size:10px;" onclick="deleteMasterCar(${c.id})">[完全に削除]</a></li>`).join('');
+    }
+
+    async function addMasterCar() {
+        const name = document.getElementById('masterCarName').value.trim(); const fuel = document.getElementById('masterFuel').value;
+        if (!name || !supabaseClient) return;
+        await supabaseClient.from('cars').insert([{ name, fuel_type: fuel, user_settings: {} }]);
+        document.getElementById('masterCarName').value = ''; refreshAll();
+    }
+
+    async function deleteMasterCar(id) { 
+        if(!supabaseClient) return;
+        if(confirm('この車を共通マスターから完全に削除しますか？すべてのユーザーの設定も消えます。')){ 
+            await supabaseClient.from('cars').delete().eq('id', id); refreshAll(); 
+        } 
+    }
+
+    // ⭕ 変更：単一テーブル内のJSON（user_settings）を読み解いて、選択中のユーザー用のUIを作る
+    function updateSettingsUI() {
+        const target = document.getElementById('targetUser').value;
+        const container = document.getElementById('settingList'); container.innerHTML = '';
+        
+        if (masterCars.length === 0) {
+            container.innerHTML = '<p style="color:#8e8e93; font-size:14px;">まず上記の車両マスターに車を登録してください。</p>';
+            return;
+        }
+
+        masterCars.forEach(car => {
+            const settings = car.user_settings || {};
+            const myConfig = settings[target] || { order: 1, show: false }; // 設定がなければ初期値
+            const visible = myConfig.show === true;
+            const order = myConfig.order || 1;
+
+            container.innerHTML += `
+                <div class="car-item">
+                    <div>
+                        <input type="number" class="order-input" value="${order}" onchange="saveConfig(${car.id}, this.value, ${visible})">
+                        <strong>${car.name}</strong> <span style="font-size:12px; color:#8e8e93;">(${car.fuel_type})</span>
+                    </div>
+                    <div>
+                        <button class="toggle-btn ${visible ? '' : 'off'}" onclick="saveConfig(${car.id}, ${order}, ${!visible})">
+                            ${visible ? '🟢 表示中' : '🔘 非表示'}
+                        </button>
+                    </div>
+                </div>`;
+        });
+    }
+
+    // ⭕ 変更：対象行のJSONデータの一部分（選択ユーザーの設定部分）だけをスマートに上書き保存する
+    async function saveConfig(id, order, visible) {
+        if (!supabaseClient) return;
+        const target = document.getElementById('targetUser').value;
+        
+        // 元の車のデータを検索
+        const originalCar = masterCars.find(c => c.id === id);
+        if (!originalCar) return;
+
+        const currentSettings = originalCar.user_settings || {};
+        // 選択されたユーザーの設定だけを上書き
+        currentSettings[target] = {
+            order: parseInt(order) || 1,
+            show: visible
+        };
+
+        await supabaseClient.from('cars').update({ user_settings: currentSettings }).eq('id', id);
+        refreshAll();
+    }
+</script>
+</body>
+</html>
