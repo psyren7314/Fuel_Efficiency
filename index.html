@@ -47,4 +47,167 @@
         .record-item:last-child { border-bottom: none; }
         .record-info .date { font-size: 12px; color: #8e8e93; margin-bottom: 4px; }
         .record-info .details { font-size: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
-        .fuel-tag { font-size: 11px; font-weight: 600; color: var(--accent-color); background-color: #e5f9eb; padding: 1px 6px; border-radius
+        .fuel-tag { font-size: 11px; font-weight: 600; color: var(--accent-color); background-color: #e5f9eb; padding: 1px 6px; border-radius: 4px; }
+        .record-info .cost-tag { color: #555; font-weight: 600; background-color: #f2f2f7; padding: 1px 5px; border-radius: 4px; }
+        .record-efficiency { display: flex; align-items: center; gap: 15px; }
+        .efficiency-val { font-size: 18px; font-weight: 700; color: var(--accent-color); }
+        .delete-btn { background: none; color: #ff3b30; border: none; padding: 5px; font-size: 14px; cursor: pointer; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div id="loginAuthPanel" class="login-panel">
+        <h2>🔒 燃費計算アプリ 認証</h2>
+        <div class="input-group"><label>ユーザーID</label><input type="text" id="siteUserId" placeholder="IDを入力"></div>
+        <div class="input-group"><label>パスワード</label><input type="password" id="siteUserPw" placeholder="パスワードを入力"></div>
+        <button class="primary-btn" onclick="authenticateSite()">ログイン</button>
+    </div>
+    <div id="mainApp">
+        <div class="header-area">
+            <h1>燃費計算<span class="commit-badge"><script>document.write(APP_VERSION);</script></span></h1>
+            <a href="admin.html" class="admin-link">⚙️ 車種管理</a>
+        </div>
+        <div class="status-bar">
+            <div>通信状態: <span id="connectionStatus" class="status-badge status-connecting">🟡 接続中...</span></div>
+            <div id="loginUserDisplay" class="user-badge">👤 ユーザー: -</div>
+        </div>
+        <div id="statusErrorDisplay" class="status-error-text"></div>
+        <div class="car-selector-card"><label for="mainCarSelector">対象車両</label><select id="mainCarSelector" onchange="loadRecords()"></select></div>
+        <div class="card">
+            <div class="card-title">新規記録</div>
+            <div class="input-group"><label for="distance">走行距離</label><input type="number" id="distance" step="0.1" placeholder="例: 450.5"><span class="unit">km</span></div>
+            <div class="input-group"><label for="amount">給油量</label><input type="number" id="amount" step="0.1" placeholder="例: 35.0"><span class="unit">L</span></div>
+            <div class="input-group"><label id="labelPrice" for="price">ガソリン単価</label><input type="number" id="price" step="1" placeholder="例: 165"><span class="unit">円/L</span></div>
+            <button class="primary-btn" onclick="saveRecord()">データを計算・サーバーへ保存</button>
+        </div>
+        <div class="card"><div class="card-title">燃費記録履歴</div><ul id="recordList" class="record-list"></ul></div>
+    </div>
+</div>
+<script>
+    let supabaseClient; let records = []; let carObjects = []; let currentLoginUser = '';
+    function cleanConfigStr(str) { return str ? str.trim().replace(/\s+/g, '').replace(/\/$/, '') : ''; }
+    async function calcHash(password) {
+        const msgUint8 = new TextEncoder().encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+        return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    async function authenticateSite() {
+        if (typeof USER_ID === 'undefined') { alert("⚠️ 認証キー同期中。数秒お待ちください。"); return; }
+        const id = document.getElementById('siteUserId').value.trim(); const pw = document.getElementById('siteUserPw').value; const hash = await calcHash(pw);
+        let valid = false;
+        if (id.toLowerCase() === ADMIN_ID.toLowerCase() && hash === ADMIN_PW_HASH) valid = true;
+        else if (id.toLowerCase() === USER_ID.toLowerCase() && hash === USER_PW_HASH) valid = true;
+        else if (typeof USER2_ID !== 'undefined' && id.toLowerCase() === USER2_ID.toLowerCase() && hash === USER2_PW_HASH) valid = true;
+        if (valid) {
+            currentLoginUser = id.toLowerCase();
+            sessionStorage.setItem('currentFuelAppUser', currentLoginUser);
+            document.getElementById('loginAuthPanel').style.display = 'none'; document.getElementById('mainApp').style.display = 'block';
+            
+            // ⭕ ログイン完了時に画面にIDを表示
+            document.getElementById('loginUserDisplay').innerText = "👤 ユーザー: " + currentLoginUser;
+            
+            initializeSupabase();
+        } else { alert("認証に失敗しました"); }
+    }
+    function updateStatusDisplay(type, text, errorMsg = '') {
+        const badge = document.getElementById('connectionStatus'); const errDisp = document.getElementById('statusErrorDisplay');
+        if (badge) { badge.innerText = text; badge.className = 'status-badge status-' + type; }
+        if (errDisp) { if (errorMsg) { errDisp.innerText = errorMsg; errDisp.style.display = 'block'; } else { errDisp.style.display = 'none'; } }
+    }
+    async function initializeSupabase() {
+        try {
+            const cleanUrl = cleanConfigStr(SUPABASE_CONFIG_URL); const cleanKey = cleanConfigStr(SUPABASE_CONFIG_ANON_KEY);
+            supabaseClient = window.supabase.createClient(cleanUrl, cleanKey);
+            await fetchCars(); loadRecords();
+        } catch (e) { updateStatusDisplay('disconnected', '🔴 初期化失敗', e.message); }
+    }
+
+    async function fetchCars() {
+        if (!supabaseClient) return;
+        const { data, error } = await supabaseClient.from('cars').select('*');
+        const selector = document.getElementById('mainCarSelector'); selector.innerHTML = '';
+        
+        if (error) {
+            updateStatusDisplay('disconnected', '🔴 車両取得エラー', error.message);
+            selector.innerHTML = `<option value="未設定">サーバー通信失敗</option>`;
+            return;
+        }
+
+        if (!data || data.length === 0) {
+            updateStatusDisplay('connected', '🟢 接続完了 (マスター未登録)');
+            selector.innerHTML = `<option value="未設定">マスター未登録</option>`;
+            return;
+        }
+
+        carObjects = [];
+        let debugText = `マスター総数: ${data.length}件 / ログイン中: ${currentLoginUser}\n`;
+
+        data.forEach(car => {
+            let settings = car.user_settings || {};
+            if (typeof settings === 'string') {
+                try { settings = JSON.parse(settings); } catch(e) { settings = {}; }
+            }
+            
+            const normalizedSettings = {};
+            Object.keys(settings).forEach(k => { normalizedSettings[k.toLowerCase()] = settings[k]; });
+            
+            const myConfig = normalizedSettings[currentLoginUser.toLowerCase()];
+            
+            if (myConfig) {
+                debugText += `・${car.name}: show=${myConfig.show}, order=${myConfig.order}\n`;
+                if (myConfig.show === true) {
+                    carObjects.push({
+                        name: car.name,
+                        fuel_type: car.fuel_type,
+                        order: parseInt(myConfig.order) || 1
+                    });
+                }
+            } else {
+                debugText += `・${car.name}: 設定が存在しません\n`;
+            }
+        });
+        
+        carObjects.sort((a, b) => a.order - b.order);
+        
+        if (carObjects.length > 0) {
+            carObjects.forEach(car => { selector.innerHTML += `<option value="${car.name}">${car.name}</option>`; });
+            updateStatusDisplay('connected', '🟢 接続完了');
+        } else { 
+            selector.innerHTML = `<option value="未設定">表示設定された車両なし</option>`;
+            updateStatusDisplay('connected', '🟡 車両リスト非表示状態', `🚨 診断情報:\n${debugText}\n※管理画面(admin.html)でこのユーザーの「🟢 表示中」ボタンが押されているか再度確認してください。`);
+        }
+    }
+
+    async function loadRecords() {
+        if (!supabaseClient) return;
+        const currentCar = document.getElementById('mainCarSelector').value;
+        if (!currentCar || currentCar === '未設定' || currentCar === '表示設定された車両なし') return;
+        try {
+            const { data, error } = await supabaseClient.from('fuel_records').select('*').eq('car_name', currentCar).eq('owner_id', currentLoginUser).order('id', { ascending: false });
+            if (!error) { records = data || []; updateLayout(); }
+        } catch (error) {}
+    }
+    function updateLayout() {
+        const list = document.getElementById('recordList'); list.innerHTML = '';
+        if (records.length === 0) { list.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:20px 0;">記録なし</li>'; return; }
+        records.forEach((record) => {
+            let fuelTag = `<span class="fuel-tag">${record.fuel_type}</span>`;
+            let costTag = `<span class="cost-tag">${Math.round(record.total_cost || 0).toLocaleString()}円</span>`;
+            list.innerHTML += `<li class="record-item"><div class="record-info"><div class="date">${record.date}</div><div class="details"><span>${record.distance}km / ${record.amount}L</span>${fuelTag}${costTag}</div></div><div class="record-efficiency"><span class="efficiency-val">${Number(record.efficiency).toFixed(2)} km/L</span><button class="delete-btn" onclick="deleteRecord(${record.id})">削除</button></div></li>`;
+        });
+    }
+    async function saveRecord() {
+        const dist = parseFloat(document.getElementById('distance').value); const amnt = parseFloat(document.getElementById('amount').value); let prc = parseFloat(document.getElementById('price').value) || 0;
+        const carName = document.getElementById('mainCarSelector').value;
+        if (!carName || carName === '未設定' || carName === '表示設定された車両なし') return alert('有効な車両が選択されていません。');
+        if (isNaN(dist) || dist <= 0 || isNaN(amnt) || amnt <= 0) return alert('数値が正しくありません。');
+        const carObj = carObjects.find(c => c.name === carName); const fuel = carObj ? carObj.fuel_type : 'レギュラー';
+        const now = new Date(); const dStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        const newRec = { date: dStr, distance: dist, amount: amnt, price: prc, total_cost: prc * amnt, fuel_type: fuel, efficiency: dist / amnt, car_name: carName, owner_id: currentLoginUser };
+        const { error } = await supabaseClient.from('fuel_records').insert([newRec]);
+        if (!error) { document.getElementById('distance').value = ''; document.getElementById('amount').value = ''; loadRecords(); }
+    }
+    async function deleteRecord(id) { if (confirm('削除しますか？')) { await supabaseClient.from('fuel_records').delete().eq('id', id); loadRecords(); } }
+</script>
+</body>
+</html>
