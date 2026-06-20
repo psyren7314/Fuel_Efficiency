@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: -apple-system, sans-serif; background-color: #f2f2f7; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .container { width: 100%; max-width: 500px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .container { width: 100%; max-width: 550px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         h1 { font-size: 24px; margin-top: 0; }
         .input-group { margin-bottom: 15px; }
         .input-group label { display: block; margin-bottom: 5px; font-weight: bold; }
@@ -17,19 +17,33 @@
         button { width: 100%; padding: 12px; background-color: #34c759; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin-bottom: 10px; }
         button.back-btn { background-color: #8e8e93; }
         #adminPanel { display: none; }
+        
         .car-list { list-style: none; padding: 0; }
-        .car-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; align-items: center; }
-        .delete-btn { width: auto; padding: 5px 10px; background-color: #ff3b30; font-size: 14px; margin: 0; }
-        .type-badge { font-size: 12px; font-weight: bold; background-color: #f2f2f7; color: #555; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
+        .car-item { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #eee; align-items: center; background-color: #fafafc; margin-bottom: 8px; border-radius: 8px; }
+        .car-info-block { flex: 1; }
+        .car-actions-block { display: flex; align-items: center; gap: 6px; }
+        
+        .order-input { width: 45px !important; padding: 5px !important; font-size: 14px !important; text-align: center; margin-right: 5px; display: inline-block !important; }
+        .type-badge { font-size: 11px; font-weight: bold; background-color: #e5f9eb; color: #34c759; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
+        
+        .toggle-btn { width: auto; padding: 6px 12px; font-size: 13px; margin: 0; border-radius: 6px; font-weight: bold; }
+        .btn-show { background-color: #007aff; }
+        .btn-hide { background-color: #ff9500; }
+        .delete-btn { width: auto; padding: 6px 12px; background-color: #ff3b30; font-size: 13px; margin: 0; border-radius: 6px; }
+        
+        /* ⭕ 新設：対象ユーザー切り替えカードの装飾 */
+        .user-switcher-card { background-color: #007aff; color: white; padding: 15px; border-radius: 10px; margin-bottom: 25px; }
+        .user-switcher-card select { background-color: white; color: #007aff; font-weight: bold; margin-top: 5px; }
     </style>
 </head>
 <body>
 
 <div class="container" id="loginPanel">
     <h1>管理者ログイン</h1>
+    <p style="font-size:13px; color:#8e8e93; margin-top:-10px;">※このページは管理者専用です。一般ユーザーのIDではログインできません。</p>
     <div class="input-group">
-        <label>ユーザーID</label>
-        <input type="text" id="userId" placeholder="IDを入力">
+        <label>管理者ID</label>
+        <input type="text" id="userId" placeholder="adminを入力">
     </div>
     <div class="input-group">
         <label>パスワード</label>
@@ -40,29 +54,49 @@
 </div>
 
 <div class="container" id="adminPanel">
-    <h1>🚗 車種管理ページ</h1>
-    <div class="input-group">
-        <label>新しい車種を追加</label>
-        <input type="text" id="newCarName" placeholder="例: プリウス">
-    </div>
-    <div class="input-group">
-        <label>指定油種</label>
-        <select id="newCarFuelType">
-            <option value="レギュラー">レギュラー</option>
-            <option value="ハイオク">ハイオク</option>
-            <option value="軽油">軽油</option>
+    <h1>⚙️ 車種・表示順 特権管理</h1>
+    
+    <div class="user-switcher-card">
+        <label for="targetUserSelector" style="font-weight:bold;">管理対象のユーザーを切り替え</label>
+        <select id="targetUserSelector" onchange="switchUser(this.value)">
+            <option value="admin">管理者自身 (admin)</option>
+            <option value="user1">ユーザー1 (user1)</option>
+            <option value="user2">ユーザー2 (user2)</option>
         </select>
     </div>
-    <button onclick="addCar()">追加する</button>
     
-    <h3 style="margin-top: 30px;">登録済みの車種</h3>
+    <div class="card" style="background:#f9f9f9; padding:15px; border-radius:10px; margin-bottom:20px;">
+        <h3 style="margin-top:0;" id="formTitle">新規車種の追加</h3>
+        <div class="input-group">
+            <label>車種名</label>
+            <input type="text" id="newCarName" placeholder="例: プリウス">
+        </div>
+        <div class="input-group">
+            <label>指定油種</label>
+            <select id="newCarFuelType">
+                <option value="レギュラー">レギュラー</option>
+                <option value="ハイオク">ハイオク</option>
+                <option value="軽油">軽油</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <label>初期並び順 (数字が小さいほど上)</label>
+            <input type="number" id="newCarOrder" value="1" min="1">
+        </div>
+        <button onclick="addCar()">追加する</button>
+    </div>
+    
+    <h3 id="listTitle">登録済みの車種一覧</h3>
+    <p style="font-size:12px; color:#8e8e93; margin-top:-10px;">※順序の数字を入力して枠外をタップすると即時並び順が保存されます。</p>
     <ul id="carList" class="car-list"></ul>
+    
     <button class="back-btn" style="margin-top:20px;" onclick="location.href='index.html'">計算ページに戻る</button>
 </div>
 
 <script>
     let supabaseClient;
     let cars = [];
+    let activeTargetUser = 'admin'; // デフォルトは管理者自身の車
 
     window.addEventListener('DOMContentLoaded', () => {
         const cleanUrl = SUPABASE_CONFIG_URL.trim().replace(/\/$/, '');
@@ -81,17 +115,36 @@
         const pw = document.getElementById('userPw').value;
         const hashedPw = await hashPassword(pw);
 
+        // ⭕ 完全ロック：この管理画面に入れるのは「admin」のみに厳格固定！
         if (id === ADMIN_ID && hashedPw === ADMIN_PW_HASH) {
             document.getElementById('loginPanel').style.display = 'none';
             document.getElementById('adminPanel').style.display = 'block';
+            updateLabels();
             loadCars();
         } else {
-            alert("IDまたはパスワードが間違っています。");
+            alert("車種管理にアクセスする権限がありません。（管理者アカウントでのみログイン可能です）");
         }
     }
 
+    // ⭕ 新設：ドロップダウンで対象ユーザーを切り替えた時の処理
+    function switchUser(userId) {
+        activeTargetUser = userId;
+        updateLabels();
+        loadCars();
+    }
+
+    function updateLabels() {
+        document.getElementById('formTitle').innerText = `【${activeTargetUser}】へ新規車種を追加`;
+        document.getElementById('listTitle').innerText = `【${activeTargetUser}】の登録済み車種一覧`;
+    }
+
     async function loadCars() {
-        const { data, error } = await supabaseClient.from('cars').select('*').order('id');
+        const { data, error } = await supabaseClient
+            .from('cars')
+            .select('*')
+            .eq('owner_id', activeTargetUser)
+            .order('sort_order', { ascending: true });
+        
         if (!error) {
             cars = data || [];
             updateCarList();
@@ -101,25 +154,69 @@
     function updateCarList() {
         const list = document.getElementById('carList');
         list.innerHTML = '';
+        
+        if (cars.length === 0) {
+            list.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:15px 0;">このユーザーに登録された車種はありません</li>';
+            return;
+        }
+
         cars.forEach(car => {
             const fuel = car.fuel_type || 'レギュラー';
-            list.innerHTML += `<li class="car-item"><div><span>${car.name}</span><span class="type-badge">${fuel}</span></div> <button class="delete-btn" onclick="deleteCar(${car.id})">削除</button></li>`;
+            const visible = car.is_visible !== false;
+            const toggleText = visible ? "🟢 表示中" : "🟠 非表示";
+            const toggleClass = visible ? "btn-show" : "btn-hide";
+            const order = car.sort_order || 1;
+
+            list.innerHTML += `
+                <li class="car-item">
+                    <div class="car-info-block">
+                        <input type="number" class="order-input" value="${order}" onchange="updateOrder(${car.id}, this.value)">
+                        <strong>${car.name}</strong>
+                        <span class="type-badge">${fuel}</span>
+                    </div>
+                    <div class="car-actions-block">
+                        <button class="toggle-btn ${toggleClass}" onclick="toggleVisibility(${car.id}, ${visible})">${toggleText}</button>
+                        <button class="delete-btn" onclick="deleteCar(${car.id})">削除</button>
+                    </div>
+                </li>
+            `;
         });
     }
 
     async function addCar() {
         const name = document.getElementById('newCarName').value.trim();
         const fuel_type = document.getElementById('newCarFuelType').value;
+        const sort_order = parseInt(document.getElementById('newCarOrder').value) || 1;
         if (!name) return alert("車種名を入力してください。");
         
-        // ⭕ 車種名と油種をセットにして保存
-        const { error } = await supabaseClient.from('cars').insert([{ name: name, fuel_type: fuel_type }]);
+        const { error } = await supabaseClient.from('cars').insert([{ 
+            name: name, 
+            fuel_type: fuel_type, 
+            sort_order: sort_order, 
+            is_visible: true,
+            owner_id: activeTargetUser /* 選ばれているユーザーのIDを紐付け */
+        }]);
+        
         if (error) alert("追加失敗: " + error.message);
         else {
             document.getElementById('newCarName').value = '';
             document.getElementById('newCarFuelType').value = 'レギュラー';
+            document.getElementById('newCarOrder').value = '1';
             loadCars();
         }
+    }
+
+    async function toggleVisibility(id, currentStatus) {
+        const { error } = await supabaseClient.from('cars').update({ is_visible: !currentStatus }).eq('id', id);
+        if (error) alert("更新失敗: " + error.message);
+        else loadCars();
+    }
+
+    async function updateOrder(id, newOrder) {
+        const val = parseInt(newOrder) || 1;
+        const { error } = await supabaseClient.from('cars').update({ sort_order: val }).eq('id', id);
+        if (error) alert("順序の更新に失敗しました: " + error.message);
+        else loadCars();
     }
 
     async function deleteCar(id) {
