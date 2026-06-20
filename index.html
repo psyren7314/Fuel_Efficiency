@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // 1. アップデート時は下の番号を変更してください
-    const APP_VERSION = "#24";
+    const APP_VERSION = "#26";
 
     // 2. ご自身のSupabase接続情報を「 " 」の間に貼り付けてください
     const SUPABASE_URL = 'https://jpdpoxrwugqeobkbyhzw.supabase.co'; 
@@ -54,7 +54,6 @@
             margin-left: 10px;
         }
 
-        /* 通信状態バーのデザイン */
         .status-bar {
             font-size: 14px;
             color: #8e8e93;
@@ -73,7 +72,6 @@
         .status-connected { background-color: #e5f9eb; color: var(--accent-color); }
         .status-disconnected { background-color: #ffe5e5; color: var(--danger-color); }
 
-        /* エラーコード画面上表記用エリア */
         .status-error-text {
             font-size: 13px;
             color: var(--danger-color);
@@ -233,10 +231,16 @@
 </div>
 
 <script>
-    let supabase;
+    let supabaseClient; // 名前の競合を防ぐため一意の変数名に変更
     let records = [];
 
-    // ステータス更新＆エラー表記制御関数
+    // 文字列整形
+    function cleanConfigStr(str) {
+        if (!str) return '';
+        return str.trim().replace(/\s+/g, '').replace(/\/$/, '');
+    }
+
+    // ステータス更新
     function updateStatusDisplay(type, text, errorMsg = '') {
         const badge = document.getElementById('connectionStatus');
         const errorDisplay = document.getElementById('statusErrorDisplay');
@@ -249,7 +253,7 @@
         if (errorDisplay) {
             if (errorMsg) {
                 errorDisplay.innerText = "⚠️ エラー詳細: " + errorMsg;
-                errorDisplay.style.display = 'block'; /* ⭕ タイポを完全に修正 */
+                errorDisplay.style.display = 'block';
             } else {
                 errorDisplay.innerText = "";
                 errorDisplay.style.display = 'none';
@@ -257,17 +261,22 @@
         }
     }
 
-    // 初期化処理
+    // 最新のライブラリ（v2）に対応した初期化処理
     window.addEventListener('DOMContentLoaded', () => {
         try {
-            const isDefaultUrl = (SUPABASE_URL.indexOf("YOUR_PROJECT_ID") !== -1 || SUPABASE_URL === '');
+            const cleanUrl = cleanConfigStr(SUPABASE_URL);
+            const cleanKey = cleanConfigStr(SUPABASE_ANON_KEY);
+            const isDefaultUrl = (cleanUrl.indexOf("YOUR_PROJECT_ID") !== -1 || cleanUrl === '');
             
-            if (window.supabase && !isDefaultUrl) {
+            // window.supabase ではなく、CDNから直接読み込まれた supabase オブジェクトを参照
+            const lib = window.supabase || supabase;
+
+            if (lib && !isDefaultUrl) {
                 updateStatusDisplay('connecting', '🟡 接続中...');
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                supabaseClient = lib.createClient(cleanUrl, cleanKey);
                 loadFromServer();
-            } else if (!window.supabase) {
-                updateStatusDisplay('disconnected', '🔴 未接続 (ライブラリの読み込みに失敗しました)');
+            } else if (!lib) {
+                updateStatusDisplay('disconnected', '🔴 未接続 (ライブラリの解析に失敗しました)');
             } else {
                 updateStatusDisplay('disconnected', '🔴 未接続 (接続情報が初期状態です)');
             }
@@ -278,11 +287,10 @@
 
     // サーバーからデータを取得
     async function loadFromServer() {
-        if (!supabase) return;
+        if (!supabaseClient) return;
         try {
-            // 5秒のタイムアウト安全監視
             const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('サーバーの応答時間を超過しました(タイムアウト)')), 5000));
-            const fetchPromise = supabase.from('fuel_records').select('*').order('id', { ascending: false });
+            const fetchPromise = supabaseClient.from('fuel_records').select('*').order('id', { ascending: false });
 
             const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -352,9 +360,9 @@
         distanceInput.value = '';
         amountInput.value = '';
 
-        if (supabase) {
+        if (supabaseClient) {
             updateStatusDisplay('connecting', '🟡 送信中...');
-            supabase
+            supabaseClient
                 .from('fuel_records')
                 .insert([newRecord])
                 .then(({ error }) => {
@@ -374,13 +382,13 @@
     // 削除処理
     async function deleteRecord(id) {
         if (confirm('この記録をサーバーから削除しますか？')) {
-            if (!supabase) {
+            if (!supabaseClient) {
                 removeLocalRecord(0);
                 return;
             }
             try {
                 updateStatusDisplay('connecting', '🟡 削除中...');
-                const { error } = await supabase.from('fuel_records').delete().eq('id', id);
+                const { error } = await supabaseClient.from('fuel_records').delete().eq('id', id);
                 if (error) {
                     updateStatusDisplay('disconnected', '🔴 未接続 (削除失敗)', error.message);
                 } else {
