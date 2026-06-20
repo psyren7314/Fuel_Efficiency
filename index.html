@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // アップデート時は下の番号を変更してください
-    const APP_VERSION = "#43";
+    const APP_VERSION = "#45";
 </script>
 <html lang="ja">
 <head>
@@ -80,7 +80,7 @@
     </div>
 </div>
 <script>
-    let supabaseClient; let records = []; let userCars = []; let currentLoginUser = '';
+    let supabaseClient; let records = []; let carObjects = []; let currentLoginUser = '';
     function cleanConfigStr(str) { return str ? str.trim().replace(/\s+/g, '').replace(/\/$/, '') : ''; }
     async function calcHash(password) {
         const msgUint8 = new TextEncoder().encode(password);
@@ -112,19 +112,37 @@
             await fetchCars(); loadRecords();
         } catch (e) { updateStatusDisplay('disconnected', '🔴 初期化失敗', e.message); }
     }
+
+    // ⭕ 変更：全車両の中から、JSON(user_settings)の中に「自分のIDの設定があり、かつ表示ON」のものだけを並び順通りに抽出！
     async function fetchCars() {
         if (!supabaseClient) return;
-        const { data: settings } = await supabaseClient.from('user_car_settings').select('car_name, sort_order').eq('user_id', currentLoginUser).eq('is_visible', true).order('sort_order');
-        const { data: masters } = await supabaseClient.from('cars').select('name, fuel_type');
+        const { data, error } = await supabaseClient.from('cars').select('*');
         const selector = document.getElementById('mainCarSelector'); selector.innerHTML = '';
-        if (settings && settings.length > 0) {
-            userCars = settings.map(s => {
-                const m = masters ? masters.find(m => m.name === s.car_name) : null;
-                return { name: s.car_name, fuel_type: m ? m.fuel_type : 'レギュラー' };
+        
+        if (!error && data) {
+            carObjects = [];
+            data.forEach(car => {
+                const settings = car.user_settings || {};
+                const myConfig = settings[currentLoginUser];
+                // 自分が「表示ON」に設定している場合のみリストに並べる
+                if (myConfig && myConfig.show === true) {
+                    carObjects.push({
+                        name: car.name,
+                        fuel_type: car.fuel_type,
+                        order: parseInt(myConfig.order) || 1
+                    });
+                }
             });
-            userCars.forEach(car => { selector.innerHTML += `<option value="${car.name}">${car.name}</option>`; });
-        } else { selector.innerHTML = `<option value="未設定">設定済みの車両なし</option>`; }
+            
+            // 自分の指定した並び順（order）の小さい順にソートしてプルダウンにセット
+            carObjects.sort((a, b) => a.order - b.order);
+            
+            if (carObjects.length > 0) {
+                carObjects.forEach(car => { selector.innerHTML += `<option value="${car.name}">${car.name}</option>`; });
+            } else { selector.innerHTML = `<option value="未設定">表示設定された車両なし</option>`; }
+        } else { selector.innerHTML = `<option value="未設定">表示設定された車両なし</option>`; }
     }
+
     async function loadRecords() {
         if (!supabaseClient) return;
         const currentCar = document.getElementById('mainCarSelector').value;
@@ -148,7 +166,7 @@
         const carName = document.getElementById('mainCarSelector').value;
         if (!carName || carName === '未設定') return alert('有効な車両が選択されていません。');
         if (isNaN(dist) || dist <= 0 || isNaN(amnt) || amnt <= 0) return alert('数値が正しくありません。');
-        const carObj = userCars.find(c => c.name === carName); const fuel = carObj ? carObj.fuel_type : 'レギュラー';
+        const carObj = carObjects.find(c => c.name === carName); const fuel = carObj ? carObj.fuel_type : 'レギュラー';
         const now = new Date(); const dStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         const newRec = { date: dStr, distance: dist, amount: amnt, price: prc, total_cost: prc * amnt, fuel_type: fuel, efficiency: dist / amnt, car_name: carName, owner_id: currentLoginUser };
         const { error } = await supabaseClient.from('fuel_records').insert([newRec]);
