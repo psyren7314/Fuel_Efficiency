@@ -1,40 +1,19 @@
 <!DOCTYPE html>
 <script>
-    // アップデート時は下の番号を変更してください
-    const APP_VERSION = "#41";
+    const APP_VERSION = "#42";
 </script>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>燃費計算</title>
-    
     <script> document.title = "燃費計算 (" + APP_VERSION + ")"; </script>
     <script src="config.js"></script>
     <script src="credentials.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
     <style>
-        :root {
-            --primary-color: #007aff;
-            --bg-color: #f2f2f7;
-            --card-bg: #ffffff;
-            --text-color: #1c1c1e;
-            --accent-color: #34c759;
-            --warning-color: #ff9500;
-            --danger-color: #ff3b30;
-        }
-
-        body {
-            font-family: -apple-system, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-        }
-
+        :root { --primary-color: #007aff; --bg-color: #f2f2f7; --card-bg: #ffffff; --text-color: #1c1c1e; --accent-color: #34c759; --warning-color: #ff9500; --danger-color: #ff3b30; }
+        body { font-family: -apple-system, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; display: flex; justify-content: center; }
         .container { width: 100%; max-width: 500px; }
         .login-panel { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 40px; }
         .login-panel h2 { margin-top: 0; margin-bottom: 20px; font-size: 22px; text-align: center; }
@@ -42,50 +21,25 @@
         .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
         h1 { font-size: 26px; margin: 0; font-weight: 700; }
         .commit-badge { font-size: 14px; color: #8e8e93; font-weight: normal; margin-left: 8px; }
-        
-        .admin-link {
-            font-size: 14px;
-            color: var(--primary-color);
-            text-decoration: none;
-            font-weight: bold;
-            background-color: #e5f1ff;
-            padding: 5px 10px;
-            border-radius: 8px;
-        }
-
-        .car-selector-card {
-            background-color: #34c759;
-            color: white;
-            padding: 15px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            box-shadow: 0 4px 6px rgba(52, 199, 89, 0.2);
-        }
+        .admin-link { font-size: 14px; color: var(--primary-color); text-decoration: none; font-weight: bold; background-color: #e5f1ff; padding: 5px 10px; border-radius: 8px; }
+        .car-selector-card { background-color: #34c759; color: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; display: flex; align-items: center; box-shadow: 0 4px 6px rgba(52, 199, 89, 0.2); }
         .car-selector-card label { font-weight: bold; margin-right: 15px; }
         .car-selector-card select { flex: 1; padding: 8px; border-radius: 6px; border: none; font-size: 16px; font-weight: bold; }
-
         .status-bar { font-size: 14px; color: #8e8e93; margin-bottom: 15px; display: flex; align-items: center; gap: 5px; }
         .status-badge { font-weight: 600; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
         .status-connecting { background-color: #ffe5cc; color: var(--warning-color); }
         .status-connected { background-color: #e5f9eb; color: var(--accent-color); }
         .status-disconnected { background-color: #ffe5e5; color: var(--danger-color); }
-        
         .status-error-text { font-size: 13px; color: var(--danger-color); background-color: #fff2f2; border-left: 3px solid var(--danger-color); padding: 10px 12px; border-radius: 6px; margin-bottom: 20px; display: none; word-break: break-all; font-family: monospace; line-height: 1.4; }
-
         .card { background-color: var(--card-bg); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         .card-title { font-size: 18px; font-weight: 600; margin-top: 0; margin-bottom: 15px; }
-
         .input-group { display: flex; align-items: center; margin-bottom: 15px; position: relative; }
         .input-group label { width: 90px; font-weight: 500; }
         .input-group input, .input-group select { flex: 1; padding: 10px; border: 1px solid #d1d1d6; border-radius: 8px; font-size: 16px; background-color: #fafafc; outline: none; box-sizing: border-box; }
         .input-group select { padding-right: 30px; -webkit-appearance: none; appearance: none; }
         .input-group .unit { width: 45px; text-align: right; color: #8e8e93; font-size: 14px; }
-
         button.primary-btn { width: 100%; padding: 14px; background-color: var(--primary-color); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
         button.primary-btn:active { opacity: 0.8; }
-
         .record-list { list-style: none; padding: 0; margin: 0; }
         .record-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #e5e5ea; }
         .record-item:last-child { border-bottom: none; }
@@ -99,271 +53,110 @@
     </style>
 </head>
 <body>
-
 <div class="container">
     <div id="loginAuthPanel" class="login-panel">
         <h2>🔒 燃費計算アプリ 認証</h2>
-        <div class="input-group">
-            <label>ユーザーID</label>
-            <input type="text" id="siteUserId" placeholder="IDを入力">
-        </div>
-        <div class="input-group">
-            <label>パスワード</label>
-            <input type="password" id="siteUserPw" placeholder="パスワードを入力">
-        </div>
+        <div class="input-group"><label>ユーザーID</label><input type="text" id="siteUserId" placeholder="IDを入力"></div>
+        <div class="input-group"><label>パスワード</label><input type="password" id="siteUserPw" placeholder="パスワードを入力"></div>
         <button class="primary-btn" onclick="authenticateSite()">ログイン</button>
     </div>
-
     <div id="mainApp">
         <div class="header-area">
             <h1>燃費計算<span class="commit-badge"><script>document.write(APP_VERSION);</script></span></h1>
             <a href="admin.html" class="admin-link">⚙️ 車種管理</a>
         </div>
-        
-        <div class="status-bar">
-            通信状態: <span id="connectionStatus" class="status-badge status-connecting">🟡 接続中...</span>
-        </div>
+        <div class="status-bar">通信状態: <span id="connectionStatus" class="status-badge status-connecting">🟡 接続中...</span></div>
         <div id="statusErrorDisplay" class="status-error-text"></div>
-
-        <div class="car-selector-card">
-            <label for="mainCarSelector">対象車両</label>
-            <select id="mainCarSelector" onchange="loadRecords()"></select>
-        </div>
-
+        <div class="car-selector-card"><label for="mainCarSelector">対象車両</label><select id="mainCarSelector" onchange="loadRecords()"></select></div>
         <div class="card">
             <div class="card-title">新規記録</div>
-            <div class="input-group">
-                <label for="distance">走行距離</label>
-                <input type="number" id="distance" step="0.1" placeholder="例: 450.5">
-                <span class="unit">km</span>
-            </div>
-            <div class="input-group">
-                <label for="amount">給油量</label>
-                <input type="number" id="amount" step="0.1" placeholder="例: 35.0">
-                <span class="unit">L</span>
-            </div>
-            <div class="input-group">
-                <label for="price">ガソリン単価</label>
-                <input type="number" id="price" step="1" placeholder="例: 165">
-                <span class="unit">円/L</span>
-            </div>
+            <div class="input-group"><label for="distance">走行距離</label><input type="number" id="distance" step="0.1" placeholder="例: 450.5"><span class="unit">km</span></div>
+            <div class="input-group"><label for="amount">給油量</label><input type="number" id="amount" step="0.1" placeholder="例: 35.0"><span class="unit">L</span></div>
+            <div class="input-group"><label for="price">ガソリン単価</label><input type="number" id="price" step="1" placeholder="例: 165"><span class="unit">円/L</span></div>
             <button class="primary-btn" onclick="saveRecord()">データを計算・サーバーへ保存</button>
         </div>
-
-        <div class="card">
-            <div class="card-title">燃費記録履歴</div>
-            <ul id="recordList" class="record-list"></ul>
-        </div>
+        <div class="card"><div class="card-title">燃費記録履歴</div><ul id="recordList" class="record-list"></ul></div>
     </div>
 </div>
-
 <script>
-    let supabaseClient;
-    let records = [];
-    let carObjects = [];
-    let currentLoginUser = '';
-
+    let supabaseClient; let records = []; let userCars = []; let currentLoginUser = '';
     function cleanConfigStr(str) { return str ? str.trim().replace(/\s+/g, '').replace(/\/$/, '') : ''; }
-
     async function calcHash(password) {
         const msgUint8 = new TextEncoder().encode(password);
         const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
     }
-
     async function authenticateSite() {
-        if (typeof USER_ID === 'undefined' || typeof ADMIN_ID === 'undefined') {
-            alert("⚠️ サーバーからの認証キーを読み込み中です。あと数秒待ってからもう一度お試しください。");
-            return;
-        }
-        try {
-            const inputId = document.getElementById('siteUserId').value.trim();
-            const inputPw = document.getElementById('siteUserPw').value;
-            const hashedPw = await calcHash(inputPw);
-
-            let isValid = false;
-            if (inputId === USER_ID && hashedPw === USER_PW_HASH) {
-                isValid = true; // user1
-            } else if (typeof USER2_ID !== 'undefined' && inputId === USER2_ID && hashedPw === USER2_PW_HASH) {
-                isValid = true; // user2
-            } else if (inputId === ADMIN_ID && hashedPw === ADMIN_PW_HASH) {
-                isValid = true; // ⭕ adminでのログインも完全サポート開通
-            }
-
-            if (isValid) {
-                currentLoginUser = inputId;
-                document.getElementById('loginAuthPanel').style.display = 'none';
-                document.getElementById('mainApp').style.display = 'block';
-                initializeSupabase();
-            } else {
-                alert("ユーザーIDまたはパスワードが正しくありません。");
-            }
-        } catch (err) {
-            alert("ログイン処理エラー: " + err.message);
-        }
+        const id = document.getElementById('siteUserId').value.trim(); const pw = document.getElementById('siteUserPw').value; const hash = await calcHash(pw);
+        let valid = false;
+        if (id === ADMIN_ID && hash === ADMIN_PW_HASH) valid = true;
+        else if (id === USER_ID && hash === USER_PW_HASH) valid = true;
+        else if (typeof USER2_ID !== 'undefined' && id === USER2_ID && hash === USER2_PW_HASH) valid = true;
+        if (valid) {
+            currentLoginUser = id; sessionStorage.setItem('currentFuelAppUser', id);
+            document.getElementById('loginAuthPanel').style.display = 'none'; document.getElementById('mainApp').style.display = 'block';
+            initializeSupabase();
+        } else { alert("認証に失敗しました"); }
     }
-
     function updateStatusDisplay(type, text, errorMsg = '') {
-        const badge = document.getElementById('connectionStatus');
-        const errDisp = document.getElementById('statusErrorDisplay');
+        const badge = document.getElementById('connectionStatus'); const errDisp = document.getElementById('statusErrorDisplay');
         if (badge) { badge.innerText = text; badge.className = 'status-badge status-' + type; }
-        if (errDisp) {
-            if (errorMsg) { errDisp.innerText = "⚠️ エラー: " + errorMsg; errDisp.style.display = 'block'; } 
-            else { errDisp.style.display = 'none'; }
-        }
+        if (errDisp) { if (errorMsg) { errDisp.innerText = "⚠️ エラー: " + errorMsg; errDisp.style.display = 'block'; } else { errDisp.style.display = 'none'; } }
     }
-
     async function initializeSupabase() {
         try {
-            const hasConfig = (typeof SUPABASE_CONFIG_URL !== 'undefined' && typeof SUPABASE_CONFIG_ANON_KEY !== 'undefined');
-            const cleanUrl = hasConfig ? cleanConfigStr(SUPABASE_CONFIG_URL) : '';
-            const cleanKey = hasConfig ? cleanConfigStr(SUPABASE_CONFIG_ANON_KEY) : '';
-            const lib = window.supabase || supabase;
-
-            if (lib && hasConfig && cleanUrl !== '') {
-                updateStatusDisplay('connecting', '🟡 接続中...');
-                supabaseClient = lib.createClient(cleanUrl, cleanKey);
-                
-                await fetchCars();
-                loadRecords();
-            } else {
-                updateStatusDisplay('disconnected', '🔴 未接続 (設定不備)');
-            }
-        } catch (e) {
-            updateStatusDisplay('disconnected', '🔴 未接続 (初期化失敗)', e.message);
-        }
+            const cleanUrl = cleanConfigStr(SUPABASE_CONFIG_URL); const cleanKey = cleanConfigStr(SUPABASE_CONFIG_ANON_KEY);
+            supabaseClient = window.supabase.createClient(cleanUrl, cleanKey);
+            await fetchCars(); loadRecords();
+        } catch (e) { updateStatusDisplay('disconnected', '🔴 初期化失敗', e.message); }
     }
 
-    // ⭕ ログイン中のユーザー（admin / user1 / user2）に応じた並び順・表示車両リストを取得
+    // ⭕ 変更：user_car_settings（個別設定）から表示車両と並び順を取得
     async function fetchCars() {
         if (!supabaseClient) return;
-        const { data, error } = await supabaseClient
-            .from('cars')
-            .select('name, fuel_type')
-            .eq('is_visible', true)
-            .eq('owner_id', currentLoginUser) 
-            .order('sort_order', { ascending: true });
+        // 自分の設定テーブルを取得
+        const { data: settings } = await supabaseClient.from('user_car_settings').select('car_name, sort_order').eq('user_id', currentLoginUser).eq('is_visible', true).order('sort_order');
+        // 車両マスター（油種取得用）を取得
+        const { data: masters } = await supabaseClient.from('cars').select('name, fuel_type');
         
-        const selector = document.getElementById('mainCarSelector');
-        selector.innerHTML = '';
-        
-        if (!error && data && data.length > 0) {
-            carObjects = data;
-            carObjects.forEach(car => {
-                selector.innerHTML += `<option value="${car.name}">${car.name}</option>`;
+        const selector = document.getElementById('mainCarSelector'); selector.innerHTML = '';
+        if (settings && settings.length > 0) {
+            userCars = settings.map(s => {
+                const m = masters.find(m => m.name === s.car_name);
+                return { name: s.car_name, fuel_type: m ? m.fuel_type : 'レギュラー' };
             });
-        } else {
-            selector.innerHTML = `<option value="未設定">未設定</option>`;
-            carObjects = [{ name: '未設定', fuel_type: 'レギュラー' }];
-        }
+            userCars.forEach(car => { selector.innerHTML += `<option value="${car.name}">${car.name}</option>`; });
+        } else { selector.innerHTML = `<option value="未設定">未設定</option>`; }
     }
 
     async function loadRecords() {
         if (!supabaseClient) return;
         const currentCar = document.getElementById('mainCarSelector').value;
-        
         try {
-            const timeoutPromise = new Promise((_, r) => setTimeout(() => r(new Error('タイムアウト')), 5000));
-            const fetchPromise = supabaseClient.from('fuel_records').select('*').eq('car_name', currentCar).eq('owner_id', currentLoginUser).order('id', { ascending: false });
-
-            const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
-
-            if (!error) {
-                records = data || [];
-                updateLayout();
-                updateStatusDisplay('connected', '🟢 接続完了');
-            } else {
-                updateStatusDisplay('disconnected', '🔴 未接続', error.message);
-            }
-        } catch (error) {
-            updateStatusDisplay('disconnected', '🔴 未接続', error.message);
-        }
+            const { data, error } = await supabaseClient.from('fuel_records').select('*').eq('car_name', currentCar).eq('owner_id', currentLoginUser).order('id', { ascending: false });
+            if (!error) { records = data || []; updateLayout(); updateStatusDisplay('connected', '🟢 接続完了'); }
+        } catch (error) { updateStatusDisplay('disconnected', '🔴 通信エラー', error.message); }
     }
-
     function updateLayout() {
-        const listElement = document.getElementById('recordList');
-        listElement.innerHTML = '';
-
-        if (!records || records.length === 0) {
-            listElement.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:20px 0;">記録がありません</li>';
-            return;
-        }
-
+        const list = document.getElementById('recordList'); list.innerHTML = '';
+        if (records.length === 0) { list.innerHTML = '<li style="text-align:center; color:#8e8e93; padding:20px 0;">記録なし</li>'; return; }
         records.forEach((record, index) => {
-            const li = document.createElement('li');
-            li.className = 'record-item';
-            const deleteAction = record.id ? `deleteRecord(${record.id})` : `removeLocalRecord(${index})`;
-            
-            let fuelTagText = record.fuel_type ? `<span class="fuel-tag">${record.fuel_type}</span>` : '';
-            let costText = '';
-            if (record.total_cost && record.total_cost > 0) costText = `<span class="cost-tag">${Math.round(record.total_cost).toLocaleString()}円</span>`;
-            else if (record.price && record.amount) costText = `<span class="cost-tag">${Math.round(record.price * record.amount).toLocaleString()}円</span>`;
-
-            li.innerHTML = `
-                <div class="record-info">
-                    <div class="date">${record.date}</div>
-                    <div class="details">
-                        <span>距離: ${record.distance}km / 給油: ${record.amount}L</span>
-                        ${fuelTagText} ${costText}
-                    </div>
-                </div>
-                <div class="record-efficiency">
-                    <span class="efficiency-val">${Number(record.efficiency).toFixed(2)} km/L</span>
-                    <button class="delete-btn" onclick="${deleteAction}">削除</button>
-                </div>
-            `;
-            listElement.appendChild(li);
+            let fuelTag = `<span class="fuel-tag">${record.fuel_type}</span>`;
+            let costTag = `<span class="cost-tag">${Math.round(record.total_cost || 0).toLocaleString()}円</span>`;
+            list.innerHTML += `<li class="record-item"><div class="record-info"><div class="date">${record.date}</div><div class="details"><span>${record.distance}km/${record.amount}L</span>${fuelTag}${costTag}</div></div><div class="record-efficiency"><span class="efficiency-val">${Number(record.efficiency).toFixed(2)}</span><button class="delete-btn" onclick="deleteRecord(${record.id})">削除</button></div></li>`;
         });
     }
-
-    function saveRecord() {
-        const distance = parseFloat(document.getElementById('distance').value);
-        const amount = parseFloat(document.getElementById('amount').value);
-        let price = parseFloat(document.getElementById('price').value);
-        const car_name = document.getElementById('mainCarSelector').value;
-
-        if (isNaN(distance) || distance <= 0 || isNaN(amount) || amount <= 0) return alert('距離と給油量には正しい数値を入力してください。');
-        if (isNaN(price) || price < 0) price = 0;
-
-        const selectedCarObj = carObjects.find(c => c.name === car_name);
-        const fuel_type = selectedCarObj ? selectedCarObj.fuel_type : 'レギュラー';
-
-        const now = new Date();
-        const dateString = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        
-        const newRecord = { 
-            date: dateString, distance: distance, amount: amount, 
-            price: price, total_cost: price * amount, fuel_type: fuel_type,
-            efficiency: distance / amount,
-            car_name: car_name,
-            owner_id: currentLoginUser
-        };
-        
-        records.unshift(newRecord);
-        updateLayout();
-
-        document.getElementById('distance').value = '';
-        document.getElementById('amount').value = '';
-        document.getElementById('price').value = '';
-
-        if (supabaseClient) {
-            updateStatusDisplay('connecting', '🟡 送信中...');
-            supabaseClient.from('fuel_records').insert([newRecord]).then(({ error }) => {
-                if (error) console.log(error);
-                else loadRecords();
-            });
-        }
+    async function saveRecord() {
+        const dist = parseFloat(document.getElementById('distance').value); const amnt = parseFloat(document.getElementById('amount').value); let prc = parseFloat(document.getElementById('price').value) || 0;
+        const carName = document.getElementById('mainCarSelector').value;
+        const carObj = userCars.find(c => c.name === carName);
+        const fuel = carObj ? carObj.fuel_type : 'レギュラー';
+        const now = new Date(); const dStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        const newRec = { date: dStr, distance: dist, amount: amnt, price: prc, total_cost: prc * amnt, fuel_type: fuel, efficiency: dist / amnt, car_name: carName, owner_id: currentLoginUser };
+        const { error } = await supabaseClient.from('fuel_records').insert([newRec]);
+        if (!error) { document.getElementById('distance').value = ''; document.getElementById('amount').value = ''; loadRecords(); }
     }
-
-    async function deleteRecord(id) {
-        if (!confirm('この記録をサーバーから削除しますか？')) return;
-        try {
-            await supabaseClient.from('fuel_records').delete().eq('id', id);
-            loadRecords();
-        } catch(e) {}
-    }
-    function removeLocalRecord(index) { records.splice(index, 1); updateLayout(); }
+    async function deleteRecord(id) { if (confirm('削除しますか？')) { await supabaseClient.from('fuel_records').delete().eq('id', id); loadRecords(); } }
 </script>
 </body>
 </html>
