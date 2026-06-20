@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // アップデート時は下の番号を変更してください
-    const APP_VERSION = "#46";
+    const APP_VERSION = "#47";
 </script>
 <html lang="ja">
 <head>
@@ -73,7 +73,7 @@
             <div class="card-title">新規記録</div>
             <div class="input-group"><label for="distance">走行距離</label><input type="number" id="distance" step="0.1" placeholder="例: 450.5"><span class="unit">km</span></div>
             <div class="input-group"><label for="amount">給油量</label><input type="number" id="amount" step="0.1" placeholder="例: 35.0"><span class="unit">L</span></div>
-            <div class="input-group"><label for="price">ガソリン単価</label><input type="number" id="price" step="1" placeholder="例: 165"><span class="unit">円/L</span></div>
+            <div class="input-group"><label id="labelPrice" for="price">ガソリン単価</label><input type="number" id="price" step="1" placeholder="例: 165"><span class="unit">円/L</span></div>
             <button class="primary-btn" onclick="saveRecord()">データを計算・サーバーへ保存</button>
         </div>
         <div class="card"><div class="card-title">燃費記録履歴</div><ul id="recordList" class="record-list"></ul></div>
@@ -95,7 +95,7 @@
         else if (id.toLowerCase() === USER_ID.toLowerCase() && hash === USER_PW_HASH) valid = true;
         else if (typeof USER2_ID !== 'undefined' && id.toLowerCase() === USER2_ID.toLowerCase() && hash === USER2_PW_HASH) valid = true;
         if (valid) {
-            currentLoginUser = id.toLowerCase(); // ⭕ 常に小文字に統一して記憶
+            currentLoginUser = id.toLowerCase();
             sessionStorage.setItem('currentFuelAppUser', currentLoginUser);
             document.getElementById('loginAuthPanel').style.display = 'none'; document.getElementById('mainApp').style.display = 'block';
             initializeSupabase();
@@ -104,7 +104,7 @@
     function updateStatusDisplay(type, text, errorMsg = '') {
         const badge = document.getElementById('connectionStatus'); const errDisp = document.getElementById('statusErrorDisplay');
         if (badge) { badge.innerText = text; badge.className = 'status-badge status-' + type; }
-        if (errDisp) { if (errorMsg) { errDisp.innerText = "⚠️ エラー: " + errorMsg; errDisp.style.display = 'block'; } else { errDisp.style.display = 'none'; } }
+        if (errDisp) { if (errorMsg) { errDisp.innerText = errorMsg; errDisp.style.display = 'block'; } else { errDisp.style.display = 'none'; } }
     }
     async function initializeSupabase() {
         try {
@@ -114,49 +114,74 @@
         } catch (e) { updateStatusDisplay('disconnected', '🔴 初期化失敗', e.message); }
     }
 
-    // ⭕ 修正版：JSON内のキーの大文字・小文字のブレを完全に無視して、正しく設定を取得できるように修正
+    // ⭕ 鉄壁の修正：JSONのテキスト強制パース機能と、原因特定デバッグログを搭載
     async function fetchCars() {
         if (!supabaseClient) return;
-        // データを全件(列指定なし)で安全に引っ張る
         const { data, error } = await supabaseClient.from('cars').select('*');
         const selector = document.getElementById('mainCarSelector'); selector.innerHTML = '';
         
-        if (!error && data) {
-            carObjects = [];
-            data.forEach(car => {
-                const settings = car.user_settings || {};
-                
-                // 大文字小文字のズレを防ぐため、オブジェクトのキーをすべて小文字化してマッチング
-                const normalizedSettings = {};
-                Object.keys(settings).forEach(k => { normalizedSettings[k.toLowerCase()] = settings[k]; });
-                
-                const myConfig = normalizedSettings[currentLoginUser.toLowerCase()];
-                
-                if (myConfig && myConfig.show === true) {
+        if (error) {
+            updateStatusDisplay('disconnected', '🔴 車両取得エラー', error.message);
+            selector.innerHTML = `<option value="未設定">サーバー通信失敗</option>`;
+            return;
+        }
+
+        if (!data || data.length === 0) {
+            updateStatusDisplay('connected', '🟢 接続完了 (※マスターの登録車両が0件です)');
+            selector.innerHTML = `<option value="未設定">マスター未登録</option>`;
+            return;
+        }
+
+        carObjects = [];
+        let debugText = `マスター総数: ${data.length}件 / ログイン中: ${currentLoginUser}\n`;
+
+        data.forEach(car => {
+            let settings = car.user_settings || {};
+            
+            // 💡 安全装置：万が一settingsが「オブジェクト」ではなく「ただの文字列」で届いていた場合、ここで強制解凍する
+            if (typeof settings === 'string') {
+                try { settings = JSON.parse(settings); } catch(e) { settings = {}; }
+            }
+            
+            const normalizedSettings = {};
+            Object.keys(settings).forEach(k => { normalizedSettings[k.toLowerCase()] = settings[k]; });
+            
+            const myConfig = normalizedSettings[currentLoginUser.toLowerCase()];
+            
+            if (myConfig) {
+                debugText += `・${car.name}: show=${myConfig.show}, order=${myConfig.order}\n`;
+                if (myConfig.show === true) {
                     carObjects.push({
                         name: car.name,
                         fuel_type: car.fuel_type,
                         order: parseInt(myConfig.order) || 1
                     });
                 }
-            });
-            
-            carObjects.sort((a, b) => a.order - b.order);
-            
-            if (carObjects.length > 0) {
-                carObjects.forEach(car => { selector.innerHTML += `<option value="${car.name}">${car.name}</option>`; });
-            } else { selector.innerHTML = `<option value="未設定">表示設定された車両なし</option>`; }
-        } else { selector.innerHTML = `<option value="未設定">表示設定された車両なし</option>`; }
+            } else {
+                debugText += `・${car.name}: 設定が存在しません\n`;
+            }
+        });
+        
+        carObjects.sort((a, b) => a.order - b.order);
+        
+        if (carObjects.length > 0) {
+            carObjects.forEach(car => { selector.innerHTML += `<option value="${car.name}">${car.name}</option>`; });
+            updateStatusDisplay('connected', '🟢 接続完了');
+        } else { 
+            selector.innerHTML = `<option value="未設定">表示設定された車両なし</option>`;
+            // 💡 1台も出ない場合、何が起きているかの診断結果をエラー表示エリアに大々的に吐き出す
+            updateStatusDisplay('connected', '🟡 車両リスト非表示状態', `🚨 診断情報:\n${debugText}\n※管理画面(admin.html)でこのユーザーの「🟢 表示中」ボタンが押されているか再度確認してください。`);
+        }
     }
 
     async function loadRecords() {
         if (!supabaseClient) return;
         const currentCar = document.getElementById('mainCarSelector').value;
-        if (!currentCar || currentCar === '未設定' || currentCar === '表示設定された車両なし') { updateStatusDisplay('connected', '🟢 接続完了 (車両未設定)'); return; }
+        if (!currentCar || currentCar === '未設定' || currentCar === '表示設定された車両なし') return;
         try {
             const { data, error } = await supabaseClient.from('fuel_records').select('*').eq('car_name', currentCar).eq('owner_id', currentLoginUser).order('id', { ascending: false });
-            if (!error) { records = data || []; updateLayout(); updateStatusDisplay('connected', '🟢 接続完了'); }
-        } catch (error) { updateStatusDisplay('disconnected', '🔴 通信エラー', error.message); }
+            if (!error) { records = data || []; updateLayout(); }
+        } catch (error) {}
     }
     function updateLayout() {
         const list = document.getElementById('recordList'); list.innerHTML = '';
