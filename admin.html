@@ -13,13 +13,14 @@
         h1 { font-size: 24px; margin-top: 0; }
         .input-group { margin-bottom: 15px; }
         .input-group label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .input-group input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        .input-group input, .input-group select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; background-color: #fafafc; }
         button { width: 100%; padding: 12px; background-color: #34c759; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; margin-bottom: 10px; }
         button.back-btn { background-color: #8e8e93; }
         #adminPanel { display: none; }
         .car-list { list-style: none; padding: 0; }
         .car-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; align-items: center; }
         .delete-btn { width: auto; padding: 5px 10px; background-color: #ff3b30; font-size: 14px; margin: 0; }
+        .type-badge { font-size: 12px; font-weight: bold; background-color: #f2f2f7; color: #555; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
     </style>
 </head>
 <body>
@@ -44,6 +45,14 @@
         <label>新しい車種を追加</label>
         <input type="text" id="newCarName" placeholder="例: プリウス">
     </div>
+    <div class="input-group">
+        <label>指定油種</label>
+        <select id="newCarFuelType">
+            <option value="レギュラー">レギュラー</option>
+            <option value="ハイオク">ハイオク</option>
+            <option value="軽油">軽油</option>
+        </select>
+    </div>
     <button onclick="addCar()">追加する</button>
     
     <h3 style="margin-top: 30px;">登録済みの車種</h3>
@@ -60,7 +69,6 @@
         supabaseClient = window.supabase.createClient(cleanUrl, SUPABASE_CONFIG_ANON_KEY.trim());
     });
 
-    // パスワードを暗号化（ハッシュ化）して比較する関数
     async function hashPassword(password) {
         const msgUint8 = new TextEncoder().encode(password);
         const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
@@ -69,7 +77,7 @@
     }
 
     async function login() {
-        const id = document.getElementById('userId').value;
+        const id = document.getElementById('userId').value.trim();
         const pw = document.getElementById('userPw').value;
         const hashedPw = await hashPassword(pw);
 
@@ -94,23 +102,28 @@
         const list = document.getElementById('carList');
         list.innerHTML = '';
         cars.forEach(car => {
-            list.innerHTML += `<li class="car-item">${car.name} <button class="delete-btn" onclick="deleteCar(${car.id})">削除</button></li>`;
+            const fuel = car.fuel_type || 'レギュラー';
+            list.innerHTML += `<li class="car-item"><div><span>${car.name}</span><span class="type-badge">${fuel}</span></div> <button class="delete-btn" onclick="deleteCar(${car.id})">削除</button></li>`;
         });
     }
 
     async function addCar() {
         const name = document.getElementById('newCarName').value.trim();
+        const fuel_type = document.getElementById('newCarFuelType').value;
         if (!name) return alert("車種名を入力してください。");
-        const { error } = await supabaseClient.from('cars').insert([{ name: name }]);
+        
+        // ⭕ 車種名と油種をセットにして保存
+        const { error } = await supabaseClient.from('cars').insert([{ name: name, fuel_type: fuel_type }]);
         if (error) alert("追加失敗: " + error.message);
         else {
             document.getElementById('newCarName').value = '';
+            document.getElementById('newCarFuelType').value = 'レギュラー';
             loadCars();
         }
     }
 
     async function deleteCar(id) {
-        if (!confirm("この車種を削除しますか？（燃費履歴自体は消えません）")) return;
+        if (!confirm("この車種を削除しますか？")) return;
         const { error } = await supabaseClient.from('cars').delete().eq('id', id);
         if (error) alert("削除失敗: " + error.message);
         else loadCars();
