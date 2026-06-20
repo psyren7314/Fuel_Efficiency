@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // アップデート時は下の番号を変更してください
-    const APP_VERSION = "#31";
+    const APP_VERSION = "#32";
 </script>
 <html lang="ja">
 <head>
@@ -11,6 +11,7 @@
     
     <script> document.title = "燃費計算 (" + APP_VERSION + ")"; </script>
     <script src="config.js"></script>
+    <script src="credentials.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
@@ -36,6 +37,13 @@
 
         .container { width: 100%; max-width: 500px; }
 
+        /* ログイン画面専用のスタイル */
+        .login-panel { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 40px; }
+        .login-panel h2 { margin-top: 0; margin-bottom: 20px; font-size: 22px; text-align: center; }
+
+        /* メインアプリ画面（初期状態は非表示） */
+        #mainApp { display: none; }
+
         .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
         h1 { font-size: 26px; margin: 0; font-weight: 700; }
         .commit-badge { font-size: 14px; color: #8e8e93; font-weight: normal; margin-left: 8px; }
@@ -50,7 +58,6 @@
             border-radius: 8px;
         }
 
-        /* 車両選択エリア */
         .car-selector-card {
             background-color: #34c759;
             color: white;
@@ -59,17 +66,10 @@
             margin-bottom: 20px;
             display: flex;
             align-items: center;
-            box-shadow: 0 4px 6px rgba(52, 199, 89, 0.2);
+            box-shadow: 0 4px 6 rgba(52, 199, 89, 0.2);
         }
         .car-selector-card label { font-weight: bold; margin-right: 15px; }
-        .car-selector-card select {
-            flex: 1;
-            padding: 8px;
-            border-radius: 6px;
-            border: none;
-            font-size: 16px;
-            font-weight: bold;
-        }
+        .car-selector-card select { flex: 1; padding: 8px; border-radius: 6px; border: none; font-size: 16px; font-weight: bold; }
 
         .status-bar { font-size: 14px; color: #8e8e93; margin-bottom: 15px; display: flex; align-items: center; gap: 5px; }
         .status-badge { font-weight: 600; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
@@ -105,53 +105,69 @@
 <body>
 
 <div class="container">
-    <div class="header-area">
-        <h1>燃費計算<span class="commit-badge"><script>document.write(APP_VERSION);</script></span></h1>
-        <a href="admin.html" class="admin-link">⚙️ 車種管理</a>
-    </div>
     
-    <div class="status-bar">
-        通信状態: <span id="connectionStatus" class="status-badge status-connecting">🟡 接続中...</span>
-    </div>
-    <div id="statusErrorDisplay" class="status-error-text"></div>
-
-    <div class="car-selector-card">
-        <label for="mainCarSelector">対象車両</label>
-        <select id="mainCarSelector" onchange="loadRecords()"></select>
-    </div>
-
-    <div class="card">
-        <div class="card-title">新規記録</div>
+    <div id="loginAuthPanel" class="login-panel">
+        <h2>🔒 燃費計算アプリ 認証</h2>
         <div class="input-group">
-            <label for="distance">走行距離</label>
-            <input type="number" id="distance" step="0.1" placeholder="例: 450.5">
-            <span class="unit">km</span>
+            <label>ユーザーID</label>
+            <input type="text" id="siteUserId" placeholder="IDを入力">
         </div>
         <div class="input-group">
-            <label for="amount">給油量</label>
-            <input type="number" id="amount" step="0.1" placeholder="例: 35.0">
-            <span class="unit">L</span>
+            <label>パスワード</label>
+            <input type="password" id="siteUserPw" placeholder="パスワードを入力">
         </div>
-        <div class="input-group">
-            <label for="price">ガソリン単価</label>
-            <input type="number" id="price" step="1" placeholder="例: 165">
-            <span class="unit">円/L</span>
-        </div>
-        <div class="input-group">
-            <label for="fuelType">油種</label>
-            <select id="fuelType">
-                <option value="レギュラー">レギュラー</option>
-                <option value="ハイオク">ハイオク</option>
-                <option value="軽油">軽油</option>
-            </select>
-            <span class="unit"></span>
-        </div>
-        <button class="primary-btn" onclick="saveRecord()">データを計算・サーバーへ保存</button>
+        <button class="primary-btn" onclick="authenticateSite()">ログイン</button>
     </div>
 
-    <div class="card">
-        <div class="card-title">燃費記録履歴</div>
-        <ul id="recordList" class="record-list"></ul>
+    <div id="mainApp">
+        <div class="header-area">
+            <h1>燃費計算<span class="commit-badge"><script>document.write(APP_VERSION);</script></span></h1>
+            <a href="admin.html" class="admin-link">⚙️ 車種管理</a>
+        </div>
+        
+        <div class="status-bar">
+            通信状態: <span id="connectionStatus" class="status-badge status-connecting">🟡 接続中...</span>
+        </div>
+        <div id="statusErrorDisplay" class="status-error-text"></div>
+
+        <div class="car-selector-card">
+            <label for="mainCarSelector">対象車両</label>
+            <select id="mainCarSelector" onchange="loadRecords()"></select>
+        </div>
+
+        <div class="card">
+            <div class="card-title">新規記録</div>
+            <div class="input-group">
+                <label for="distance">走行距離</label>
+                <input type="number" id="distance" step="0.1" placeholder="例: 450.5">
+                <span class="unit">km</span>
+            </div>
+            <div class="input-group">
+                <label for="amount">給油量</label>
+                <input type="number" id="amount" step="0.1" placeholder="例: 35.0">
+                <span class="unit">L</span>
+            </div>
+            <div class="input-group">
+                <label for="price">ガソリン単価</label>
+                <input type="number" id="price" step="1" placeholder="例: 165">
+                <span class="unit">円/L</span>
+            </div>
+            <div class="input-group">
+                <label for="fuelType">油種</label>
+                <select id="fuelType">
+                    <option value="レギュラー">レギュラー</option>
+                    <option value="ハイオク">ハイオク</option>
+                    <option value="軽油">軽油</option>
+                </select>
+                <span class="unit"></span>
+            </div>
+            <button class="primary-btn" onclick="saveRecord()">データを計算・サーバーへ保存</button>
+        </div>
+
+        <div class="card">
+            <div class="card-title">燃費記録履歴</div>
+            <ul id="recordList" class="record-list"></ul>
+        </div>
     </div>
 </div>
 
@@ -161,6 +177,36 @@
     let carList = [];
 
     function cleanConfigStr(str) { return str ? str.trim().replace(/\s+/g, '').replace(/\/$/, '') : ''; }
+
+    // パスワードハッシュ化関数
+    async function calcHash(password) {
+        const msgUint8 = new TextEncoder().encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // 🔑 サイト全体のアクセス認証処理
+    async function authenticateSite() {
+        const inputId = document.getElementById('siteUserId').value.trim();
+        const inputPw = document.getElementById('siteUserPw').value;
+        const hashedPw = await calcHash(inputPw);
+
+        // 一般ユーザー(user)または管理者(admin)のどちらでもメインページは開けるようにする
+        const isUserValid = (inputId === USER_ID && hashedPw === USER_PW_HASH);
+        const isAdminValid = (inputId === ADMIN_ID && hashedPw === ADMIN_PW_HASH);
+
+        if (isUserValid || isAdminValid) {
+            // ロックを解除してアプリを起動
+            document.getElementById('loginAuthPanel').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'block';
+            
+            // ログイン成功後に初めて安全に通信を初期化・開始する
+            initializeSupabase();
+        } else {
+            alert("ユーザーIDまたはパスワードが正しくありません。");
+        }
+    }
 
     function updateStatusDisplay(type, text, errorMsg = '') {
         const badge = document.getElementById('connectionStatus');
@@ -172,7 +218,8 @@
         }
     }
 
-    window.addEventListener('DOMContentLoaded', async () => {
+    // Supabaseの初期化とデータ取得の開始
+    async function initializeSupabase() {
         try {
             const hasConfig = (typeof SUPABASE_CONFIG_URL !== 'undefined' && typeof SUPABASE_CONFIG_ANON_KEY !== 'undefined');
             const cleanUrl = hasConfig ? cleanConfigStr(SUPABASE_CONFIG_URL) : '';
@@ -183,10 +230,7 @@
                 updateStatusDisplay('connecting', '🟡 接続中...');
                 supabaseClient = lib.createClient(cleanUrl, cleanKey);
                 
-                // まず車種リストを取得する
                 await fetchCars();
-                
-                // その後、選択されている車の履歴を取得する
                 loadRecords();
             } else {
                 updateStatusDisplay('disconnected', '🔴 未接続 (設定不備)');
@@ -194,9 +238,8 @@
         } catch (e) {
             updateStatusDisplay('disconnected', '🔴 未接続 (初期化失敗)', e.message);
         }
-    });
+    }
 
-    // 車両リストをサーバーから取得
     async function fetchCars() {
         if (!supabaseClient) return;
         const { data, error } = await supabaseClient.from('cars').select('name').order('id');
@@ -209,19 +252,16 @@
                 selector.innerHTML += `<option value="${car}">${car}</option>`;
             });
         } else {
-            // DBが空の場合の初期値
             selector.innerHTML = `<option value="未設定">未設定</option>`;
         }
     }
 
-    // 選ばれている車の履歴だけを取得
     async function loadRecords() {
         if (!supabaseClient) return;
         const currentCar = document.getElementById('mainCarSelector').value;
         
         try {
             const timeoutPromise = new Promise((_, r) => setTimeout(() => r(new Error('タイムアウト')), 5000));
-            // .eq('car_name', currentCar) で、選んだ車のデータだけを抽出！
             const fetchPromise = supabaseClient.from('fuel_records').select('*').eq('car_name', currentCar).order('id', { ascending: false });
 
             const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -279,7 +319,7 @@
         const amount = parseFloat(document.getElementById('amount').value);
         let price = parseFloat(document.getElementById('price').value);
         const fuel_type = document.getElementById('fuelType').value;
-        const car_name = document.getElementById('mainCarSelector').value; // 選ばれている対象車両名を取得
+        const car_name = document.getElementById('mainCarSelector').value;
 
         if (isNaN(distance) || distance <= 0 || isNaN(amount) || amount <= 0) return alert('距離と給油量には正しい数値を入力してください。');
         if (isNaN(price) || price < 0) price = 0;
@@ -291,7 +331,7 @@
             date: dateString, distance: distance, amount: amount, 
             price: price, total_cost: price * amount, fuel_type: fuel_type,
             efficiency: distance / amount,
-            car_name: car_name // 車両名も一緒に保存！
+            car_name: car_name
         };
         
         records.unshift(newRecord);
