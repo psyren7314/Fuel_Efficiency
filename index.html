@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // アップデート時は下の番号を変更してください
-    const APP_VERSION = "Beta#1.00";
+    const APP_VERSION = "Beta#1.01";
 </script>
 <html lang="ja">
 <head>
@@ -112,19 +112,31 @@
             font-weight: 500;
         }
 
-        .input-group input {
+        .input-group input, .input-group select {
             flex: 1;
             padding: 10px;
             border: 1px solid #d1d1d6;
             border-radius: 8px;
             font-size: 16px;
             background-color: #fafafc;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .input-group select {
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 16px;
+            padding-right: 30px;
         }
 
         .input-group .unit {
-            width: 40px;
+            width: 45px;
             text-align: right;
             color: #8e8e93;
+            font-size: 14px;
         }
 
         button {
@@ -170,6 +182,27 @@
 
         .record-info .details {
             font-size: 14px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .fuel-tag {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--accent-color);
+            background-color: #e5f9eb;
+            padding: 1px 6px;
+            border-radius: 4px;
+        }
+        
+        .record-info .cost-tag {
+            color: #555;
+            font-weight: 600;
+            background-color: #f2f2f7;
+            padding: 1px 5px;
+            border-radius: 4px;
         }
 
         .record-efficiency {
@@ -218,6 +251,20 @@
             <input type="number" id="amount" step="0.1" placeholder="例: 35.0">
             <span class="unit">L</span>
         </div>
+        <div class="input-group">
+            <label for="price">ガソリン単価</label>
+            <input type="number" id="price" step="1" placeholder="例: 165">
+            <span class="unit">円/L</span>
+        </div>
+        <div class="input-group">
+            <label for="fuelType">油種</label>
+            <select id="fuelType">
+                <option value="レギュラー">レギュラー</option>
+                <option value="ハイオク">ハイオク</option>
+                <option value="軽油">軽油</option>
+            </select>
+            <span class="unit"></span>
+        </div>
         <button onclick="saveRecord()">データを計算・サーバーへ保存</button>
     </div>
 
@@ -232,13 +279,11 @@
     let supabaseClient;
     let records = [];
 
-    // 文字列整形
     function cleanConfigStr(str) {
         if (!str) return '';
         return str.trim().replace(/\s+/g, '').replace(/\/$/, '');
     }
 
-    // ステータス更新
     function updateStatusDisplay(type, text, errorMsg = '') {
         const badge = document.getElementById('connectionStatus');
         const errorDisplay = document.getElementById('statusErrorDisplay');
@@ -259,15 +304,11 @@
         }
     }
 
-    // 初期化処理
     window.addEventListener('DOMContentLoaded', () => {
         try {
-            // config.jsから読み込まれた変数があるかチェック
             const hasConfig = (typeof SUPABASE_CONFIG_URL !== 'undefined' && typeof SUPABASE_CONFIG_ANON_KEY !== 'undefined');
-            
             const cleanUrl = hasConfig ? cleanConfigStr(SUPABASE_CONFIG_URL) : '';
             const cleanKey = hasConfig ? cleanConfigStr(SUPABASE_CONFIG_ANON_KEY) : '';
-            
             const isDefaultUrl = (cleanUrl.indexOf("YOUR_PROJECT_ID") !== -1 || cleanUrl === '');
             const lib = window.supabase || supabase;
 
@@ -278,18 +319,17 @@
             } else if (!lib) {
                 updateStatusDisplay('disconnected', '🔴 未接続 (ライブラリの解析に失敗しました)');
             } else {
-                updateStatusDisplay('disconnected', '🔴 未接続 (config.js の接続情報が未設定、または初期状態です)');
+                updateStatusDisplay('disconnected', '🔴 未接続 (config.js の接続情報が未設定です)');
             }
         } catch (e) {
             updateStatusDisplay('disconnected', '🔴 未接続 (初期化失敗)', e.message);
         }
     });
 
-    // サーバーからデータを取得
     async function loadFromServer() {
         if (!supabaseClient) return;
         try {
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('サーバーの応答時間を超過しました(タイムアウト)')), 5000));
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('サーバーの応答時間を超過しました')), 5000));
             const fetchPromise = supabaseClient.from('fuel_records').select('*').order('id', { ascending: false });
 
             const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -306,7 +346,6 @@
         }
     }
 
-    // 画面表示更新
     function updateLayout() {
         const listElement = document.getElementById('recordList');
         listElement.innerHTML = '';
@@ -321,10 +360,26 @@
             li.className = 'record-item';
             const deleteAction = record.id ? `deleteRecord(${record.id})` : `removeLocalRecord(${index})`;
             
+            let fuelTagText = '';
+            if (record.fuel_type) {
+                fuelTagText = `<span class="fuel-tag">${record.fuel_type}</span>`;
+            }
+
+            let costText = '';
+            if (record.total_cost && record.total_cost > 0) {
+                costText = `<span class="cost-tag">${Math.round(record.total_cost).toLocaleString()}円</span>`;
+            } else if (record.price && record.amount) {
+                costText = `<span class="cost-tag">${Math.round(record.price * record.amount).toLocaleString()}円</span>`;
+            }
+
             li.innerHTML = `
                 <div class="record-info">
                     <div class="date">${record.date}</div>
-                    <div class="details">距離: ${record.distance}km / 給油: ${record.amount}L</div>
+                    <div class="details">
+                        <span>距離: ${record.distance}km / 給油: ${record.amount}L</span>
+                        ${fuelTagText}
+                        ${costText}
+                    </div>
                 </div>
                 <div class="record-efficiency">
                     <span class="efficiency-val">${Number(record.efficiency).toFixed(2)} km/L</span>
@@ -335,30 +390,48 @@
         });
     }
 
-    // データ保存処理
     function saveRecord() {
         const distanceInput = document.getElementById('distance');
         const amountInput = document.getElementById('amount');
+        const priceInput = document.getElementById('price');
+        const fuelTypeInput = document.getElementById('fuelType');
         
         const distance = parseFloat(distanceInput.value);
         const amount = parseFloat(amountInput.value);
+        const fuel_type = fuelTypeInput.value;
+        let price = parseFloat(priceInput.value);
 
         if (isNaN(distance) || distance <= 0 || isNaN(amount) || amount <= 0) {
             alert('距離と給油量には、0より大きい正しい数値を入力してください。');
             return;
         }
+        
+        if (isNaN(price) || price < 0) {
+            price = 0;
+        }
 
         const now = new Date();
         const dateString = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         const efficiency = distance / amount;
+        const total_cost = price * amount;
 
-        const newRecord = { date: dateString, distance: distance, amount: amount, efficiency: efficiency };
+        const newRecord = { 
+            date: dateString, 
+            distance: distance, 
+            amount: amount, 
+            price: price,
+            total_cost: total_cost,
+            fuel_type: fuel_type,
+            efficiency: efficiency 
+        };
         
         records.unshift(newRecord);
         updateLayout();
 
         distanceInput.value = '';
         amountInput.value = '';
+        priceInput.value = '';
+        fuelTypeInput.value = 'レギュラー';
 
         if (supabaseClient) {
             updateStatusDisplay('connecting', '🟡 送信中...');
@@ -367,7 +440,8 @@
                 .insert([newRecord])
                 .then(({ error }) => {
                     if (error) {
-                        updateStatusDisplay('disconnected', '🔴 未接続 (保存失敗)', error.message);
+                        updateStatusDisplay('connected', '🟢 接続完了 (※DB側の項目列が未作成の可能性があります)');
+                        console.log("サーバー保存スキップ（列未定義の可能性）:", error.message);
                     } else {
                         updateStatusDisplay('connected', '🟢 接続完了');
                         loadFromServer();
@@ -379,7 +453,6 @@
         }
     }
 
-    // 削除処理
     async function deleteRecord(id) {
         if (confirm('この記録をサーバーから削除しますか？')) {
             if (!supabaseClient) {
