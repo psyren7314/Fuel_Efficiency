@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // 1. アップデート時は下の番号を変更してください
-    const APP_VERSION = "#23";
+    const APP_VERSION = "#24";
 
     // 2. ご自身のSupabase接続情報を「 " 」の間に貼り付けてください
     const SUPABASE_URL = "https://jpdpoxrwugqeobkbyhzw.supabase.co"; 
@@ -82,7 +82,7 @@
             padding: 10px 12px;
             border-radius: 6px;
             margin-bottom: 20px;
-            display: none; /* JavaScriptで制御 */
+            display: none;
             word-break: break-all;
             font-family: monospace;
             line-height: 1.4;
@@ -249,10 +249,10 @@
         if (errorDisplay) {
             if (errorMsg) {
                 errorDisplay.innerText = "⚠️ エラー詳細: " + errorMsg;
-                errorDisplay.style.style.display = 'block'; /* ⭕ 確実に画面に表示させる命令を追加 */
+                errorDisplay.style.display = 'block'; /* ⭕ タイポを完全に修正 */
             } else {
                 errorDisplay.innerText = "";
-                errorDisplay.style.style.display = 'none';   /* 正常時は隠す */
+                errorDisplay.style.display = 'none';
             }
         }
     }
