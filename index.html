@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <script>
     // アップデート時は下の番号を変更してください
-    const APP_VERSION = "#36";
+    const APP_VERSION = "#37";
 </script>
 <html lang="ja">
 <head>
@@ -88,7 +88,6 @@
         .input-group label { width: 90px; font-weight: 500; }
         .input-group input, .input-group select { flex: 1; padding: 10px; border: 1px solid #d1d1d6; border-radius: 8px; font-size: 16px; background-color: #fafafc; outline: none; box-sizing: border-box; }
 
-        /* ⭕ コンパイルエラーの原因だったSVGを廃止し、安全なCSSデザインに変更 */
         .input-group select {
             padding-right: 30px;
             -webkit-appearance: none;
@@ -160,15 +159,6 @@
                 <input type="number" id="price" step="1" placeholder="例: 165">
                 <span class="unit">円/L</span>
             </div>
-            <div class="input-group">
-                <label for="fuelType">油種</label>
-                <select id="fuelType">
-                    <option value="レギュラー">レギュラー</option>
-                    <option value="ハイオク">ハイオク</option>
-                    <option value="軽油">軽油</option>
-                </select>
-                <span class="unit"></span>
-            </div>
             <button class="primary-btn" onclick="saveRecord()">データを計算・サーバーへ保存</button>
         </div>
 
@@ -182,7 +172,7 @@
 <script>
     let supabaseClient;
     let records = [];
-    let carList = [];
+    let carObjects = []; // 車種名と油種のペアを保持するオブジェクト配列に変更
 
     function cleanConfigStr(str) { return str ? str.trim().replace(/\s+/g, '').replace(/\/$/, '') : ''; }
 
@@ -253,19 +243,21 @@
         }
     }
 
+    // サーバーから車種と油種の情報を取得
     async function fetchCars() {
         if (!supabaseClient) return;
-        const { data, error } = await supabaseClient.from('cars').select('name').order('id');
+        const { data, error } = await supabaseClient.from('cars').select('name, fuel_type').order('id');
         const selector = document.getElementById('mainCarSelector');
         selector.innerHTML = '';
         
         if (!error && data && data.length > 0) {
-            carList = data.map(c => c.name);
-            carList.forEach(car => {
-                selector.innerHTML += `<option value="${car}">${car}</option>`;
+            carObjects = data; // 全ての車両データを保存
+            carObjects.forEach(car => {
+                selector.innerHTML += `<option value="${car.name}">${car.name}</option>`;
             });
         } else {
             selector.innerHTML = `<option value="未設定">未設定</option>`;
+            carObjects = [{ name: '未設定', fuel_type: 'レギュラー' }];
         }
     }
 
@@ -331,18 +323,21 @@
         const distance = parseFloat(document.getElementById('distance').value);
         const amount = parseFloat(document.getElementById('amount').value);
         let price = parseFloat(document.getElementById('price').value);
-        const fuel_type = document.getElementById('fuelType').value;
         const car_name = document.getElementById('mainCarSelector').value;
 
         if (isNaN(distance) || distance <= 0 || isNaN(amount) || amount <= 0) return alert('距離と給油量には正しい数値を入力してください。');
         if (isNaN(price) || price < 0) price = 0;
+
+        // ⭕ 選択されている車の油種を、あらかじめ取得してあるリストから自動検索
+        const selectedCarObj = carObjects.find(c => c.name === car_name);
+        const fuel_type = selectedCarObj ? selectedCarObj.fuel_type : 'レギュラー';
 
         const now = new Date();
         const dateString = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         
         const newRecord = { 
             date: dateString, distance: distance, amount: amount, 
-            price: price, total_cost: price * amount, fuel_type: fuel_type,
+            price: price, total_cost: price * amount, fuel_type: fuel_type, // 油種が自動セットされる
             efficiency: distance / amount,
             car_name: car_name
         };
